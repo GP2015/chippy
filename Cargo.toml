@@ -3,6 +3,10 @@ name = "chip8rust"
 version = "0.1.0"
 edition = "2024"
 
+[profile.release]
+lto = "fat"
+codegen-units = 1
+
 [dependencies]
 clap = { version = "4.5.48", features = ["derive"] }
 fastrand = "2.3.0"
