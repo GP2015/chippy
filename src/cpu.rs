@@ -1,21 +1,20 @@
 use crate::config::CPUConfig;
 use crate::emulib::Limiter;
-use crate::gpu::GPU;
+use crate::gpu::Gpu;
 use crate::input::InputManager;
 use crate::instructions::{self, InstructionFunction, Opcode};
-use crate::ram::{PROGRAM_START_ADDRESS, RAM};
+use crate::ram::{PROGRAM_START_ADDRESS, Ram};
 use crate::timer::{DelayTimer, SoundTimer};
-use fastrand;
 use std::ops::{Bound, RangeBounds};
 use std::slice::SliceIndex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-pub struct CPU {
+pub struct Cpu {
     pub active: Arc<AtomicBool>,
     pub config: CPUConfig,
-    pub gpu: Arc<GPU>,
-    pub ram: Arc<RAM>,
+    pub gpu: Arc<Gpu>,
+    pub ram: Arc<Ram>,
     pub delay_timer: Arc<DelayTimer>,
     pub sound_timer: Arc<SoundTimer>,
     pub input_manager: Arc<InputManager>,
@@ -24,23 +23,23 @@ pub struct CPU {
     v: Mutex<[u8; 16]>,
 }
 
-impl CPU {
+impl Cpu {
     pub fn try_new(
         active: Arc<AtomicBool>,
         config: CPUConfig,
-        gpu: Arc<GPU>,
-        ram: Arc<RAM>,
+        gpu: Arc<Gpu>,
+        ram: Arc<Ram>,
         delay_timer: Arc<DelayTimer>,
         sound_timer: Arc<SoundTimer>,
         input_manager: Arc<InputManager>,
     ) -> Option<Arc<Self>> {
         if config.instructions_per_second <= 0.0 {
-            eprintln!("Error: The CPU's instruction-per-second rate must be greater than 0.");
+            eprintln!("The CPU's instruction-per-second rate must be greater than 0.");
             active.store(false, Ordering::Relaxed);
             return None;
         }
 
-        return Some(Arc::new(Self {
+        Some(Arc::new(Self {
             active,
             config,
             gpu,
@@ -51,14 +50,14 @@ impl CPU {
             pc: Mutex::new(PROGRAM_START_ADDRESS),
             index: Mutex::new(0),
             v: Mutex::new([0; 16]),
-        }));
+        }))
     }
 
     #[cfg(test)]
     pub fn new_default_all_false(
         active: Arc<AtomicBool>,
-        gpu: Arc<GPU>,
-        ram: Arc<RAM>,
+        gpu: Arc<Gpu>,
+        ram: Arc<Ram>,
         delay_timer: Arc<DelayTimer>,
         sound_timer: Arc<SoundTimer>,
         input_manager: Arc<InputManager>,
@@ -90,8 +89,8 @@ impl CPU {
     #[cfg(test)]
     pub fn new_default_all_true(
         active: Arc<AtomicBool>,
-        gpu: Arc<GPU>,
-        ram: Arc<RAM>,
+        gpu: Arc<Gpu>,
+        ram: Arc<Ram>,
         delay_timer: Arc<DelayTimer>,
         sound_timer: Arc<SoundTimer>,
         input_manager: Arc<InputManager>,
@@ -134,13 +133,11 @@ impl CPU {
                 return;
             };
 
-            // println!("{:#06x}", instruction.get_full());
-
-            let Some(function) = self.decode_instruction(&instruction) else {
+            let Some(function) = Self::decode_instruction(&instruction) else {
                 continue;
             };
 
-            if self.execute_instruction(&instruction, &function) {
+            if self.execute_instruction(&instruction, function) {
                 limiter.reset();
             }
         }
@@ -150,30 +147,28 @@ impl CPU {
         let mut pc = self.pc.lock().unwrap();
 
         if *pc >= 0xFFE && !self.config.allow_program_counter_overflow {
-            eprintln!("Error: Program counter overflowed.");
+            eprintln!("Program counter overflowed.");
             self.active.store(false, Ordering::Relaxed);
             return None;
         }
 
-        let Some(instruction_bytes) = self.ram.read_bytes(*pc, 2) else {
-            return None;
-        };
+        let instruction_bytes = self.ram.read_bytes(*pc, 2)?;
 
         *pc = (*pc + 2) % 0x1000;
 
-        return Some(Opcode::from_u8s(instruction_bytes[0], instruction_bytes[1]));
+        Some(Opcode::from_u8s(instruction_bytes[0], instruction_bytes[1]))
     }
 
-    fn decode_instruction(&self, instruction: &Opcode) -> Option<InstructionFunction> {
-        instructions::get_instruction_function(&instruction)
+    fn decode_instruction(instruction: &Opcode) -> Option<InstructionFunction> {
+        instructions::get_instruction_function(instruction)
     }
 
-    fn execute_instruction(&self, instruction: &Opcode, function: &InstructionFunction) -> bool {
-        return function(&self, &instruction);
+    fn execute_instruction(&self, instruction: &Opcode, function: InstructionFunction) -> bool {
+        function(self, instruction)
     }
 
     pub fn get_pc_ref(&self) -> MutexGuard<'_, u16> {
-        return self.pc.lock().unwrap();
+        self.pc.lock().unwrap()
     }
 
     // pub fn get_pc(&self) -> u16 {
@@ -181,11 +176,10 @@ impl CPU {
     // }
 
     pub fn set_pc(&self, value: u16) {
-        if cfg!(debug_assertions) && value > 0xFFF {
-            panic!(
-                "Error: Should not be possible to manually set program counter outside address space."
-            );
-        }
+        debug_assert!(
+            value <= 0xFFF,
+            "Should not be possible to manually set program counter outside address space."
+        );
 
         *self.pc.lock().unwrap() = value;
     }
@@ -194,17 +188,17 @@ impl CPU {
         let mut pc = self.pc.lock().unwrap();
 
         if *pc >= 0xFFE && !self.config.allow_program_counter_overflow {
-            eprintln!("Error: Program counter overflowed.");
+            eprintln!("Program counter overflowed.");
             self.active.store(false, Ordering::Relaxed);
             return false;
         }
 
         *pc = (*pc + 2) % 0x1000;
-        return true;
+        true
     }
 
     pub fn get_index_reg_ref(&self) -> MutexGuard<'_, u16> {
-        return self.index.lock().unwrap();
+        self.index.lock().unwrap()
     }
 
     pub fn get_index_reg(&self) -> u16 {
@@ -212,18 +206,17 @@ impl CPU {
     }
 
     pub fn set_index_reg(&self, value: u16) {
-        if cfg!(debug_assertions) && value > 0xFFF {
-            panic!(
-                "Error: Should not be possible to manually set index register outside address space."
-            );
-        }
+        debug_assert!(
+            value <= 0xFFF,
+            "Should not be possible to manually set index register outside address space."
+        );
 
         *self.index.lock().unwrap() = value;
     }
 
     pub fn increment_index_reg_by(&self, value: u16) -> Option<bool> {
         let index = self.index.lock().unwrap();
-        return self.increment_index_reg_ref_by(index, value);
+        self.increment_index_reg_ref_by(index, value)
     }
 
     pub fn increment_index_reg_ref_by(
@@ -234,35 +227,37 @@ impl CPU {
         let (val, wrapped) = index_ref.overflowing_add(value);
 
         if wrapped && !self.config.allow_index_register_overflow {
-            eprintln!("Error: Index register overflowed.");
+            eprintln!("Index register overflowed.");
             self.active.store(false, Ordering::Relaxed);
             return None;
         }
 
         *index_ref = val;
 
-        return Some(*index_ref > 0xFFF);
+        Some(*index_ref > 0xFFF)
     }
 
     pub fn get_v_regs_ref(&self) -> MutexGuard<'_, [u8; 16]> {
-        return self.v.lock().unwrap();
+        self.v.lock().unwrap()
     }
 
     pub fn get_v_reg(&self, reg: u8) -> u8 {
-        if cfg!(debug_assertions) && reg > 0xF {
-            panic!("Error: Should not be possible to access non-existent V registers.");
-        }
+        debug_assert!(
+            reg <= 0xF,
+            "Should not be possible to access non-existent V registers."
+        );
 
-        return self.v.lock().unwrap()[reg as usize];
+        self.v.lock().unwrap()[reg as usize]
     }
 
     pub fn get_v_reg_xy(&self, x: u8, y: u8) -> (u8, u8) {
-        if cfg!(debug_assertions) && (x > 0xF || y > 0xF) {
-            panic!("Error: Should not be possible to access non-existent V registers.");
-        }
+        debug_assert!(
+            x <= 0xF && y <= 0xF,
+            "Should not be possible to access non-existent V registers."
+        );
 
         let v = self.v.lock().unwrap();
-        return (v[x as usize], v[y as usize]);
+        (v[x as usize], v[y as usize])
     }
 
     pub fn get_v_reg_range<R>(&self, range: R) -> Vec<u8>
@@ -284,30 +279,33 @@ impl CPU {
                 Bound::Unbounded => v.len() - 1,
             };
 
-            if start > 0xF || end > 0xF {
-                panic!("Error: Should not be possible to access non-existent V registers.");
-            }
+            debug_assert!(
+                start <= 0xF && end <= 0xF,
+                "Should not be possible to access non-existent V registers."
+            );
         }
 
-        return v[range].to_vec();
+        v[range].to_vec()
     }
 
     pub fn set_v_reg(&self, reg: u8, val: u8) {
-        if cfg!(debug_assertions) && reg > 0xF {
-            panic!("Error: Should not be possible to access non-existent V registers.");
-        }
+        debug_assert!(
+            reg <= 0xF,
+            "Should not be possible to access non-existent V registers."
+        );
 
         self.v.lock().unwrap()[reg as usize] = val;
     }
 
-    pub fn set_v_reg_range(&self, reg: u8, vals: &Vec<u8>) {
+    pub fn set_v_reg_range(&self, reg: u8, vals: &[u8]) {
         let reg = reg as usize;
 
-        if cfg!(debug_assertions) && reg + vals.len() - 1 > 0xF {
-            panic!("Error: Should not be possible to access non-existent V registers.");
-        }
+        debug_assert!(
+            reg + vals.len() - 1 <= 0xF,
+            "Should not be possible to access non-existent V registers."
+        );
 
-        self.v.lock().unwrap()[reg..reg + vals.len()].copy_from_slice(&vals);
+        self.v.lock().unwrap()[reg..reg + vals.len()].copy_from_slice(vals);
     }
 }
 
@@ -315,21 +313,22 @@ impl CPU {
 mod tests {
     use super::*;
 
+    #[derive(Clone, Copy)]
     enum ConfigType {
         Conservative,
         Liberal,
     }
 
-    fn create_objects(cfg_type: ConfigType) -> (Arc<CPU>, Arc<AtomicBool>) {
+    fn create_objects(cfg_type: ConfigType) -> (Arc<Cpu>, Arc<AtomicBool>) {
         let active = Arc::new(AtomicBool::new(true));
 
         let delay_timer = DelayTimer::new_default(active.clone());
         let sound_timer = SoundTimer::new_default(active.clone());
-        let ram = RAM::new_default_conservative(active.clone());
-        let gpu = GPU::new_default_wrapping(active.clone());
+        let ram = Ram::new_default_conservative(active.clone());
+        let gpu = Gpu::new_default_wrapping(active.clone());
         let input_manager = InputManager::new_default(active.clone());
         let cpu = match cfg_type {
-            ConfigType::Conservative => CPU::new_default_all_false(
+            ConfigType::Conservative => Cpu::new_default_all_false(
                 active.clone(),
                 gpu,
                 ram,
@@ -337,7 +336,7 @@ mod tests {
                 sound_timer,
                 input_manager,
             ),
-            ConfigType::Liberal => CPU::new_default_all_true(
+            ConfigType::Liberal => Cpu::new_default_all_true(
                 active.clone(),
                 gpu,
                 ram,
@@ -347,7 +346,7 @@ mod tests {
             ),
         };
 
-        return (cpu, active);
+        (cpu, active)
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use crate::cpu::CPU;
+use crate::cpu::Cpu;
 
 pub struct Opcode {
     full: u16,
@@ -60,7 +60,7 @@ impl Opcode {
     }
 }
 
-pub type InstructionFunction = fn(&CPU, &Opcode) -> bool;
+pub type InstructionFunction = fn(&Cpu, &Opcode) -> bool;
 
 pub fn get_instruction_function(op: &Opcode) -> Option<InstructionFunction> {
     match op.get_s() {
@@ -68,7 +68,7 @@ pub fn get_instruction_function(op: &Opcode) -> Option<InstructionFunction> {
             0x0E0 => Some(i_00E0_CLS),
             0x0EE => Some(i_00EE_RET),
             _ => {
-                eprintln!("Error: Machine code routines are not supported.");
+                eprintln!("Machine code routines are not supported.");
                 None
             }
         },
@@ -78,6 +78,7 @@ pub fn get_instruction_function(op: &Opcode) -> Option<InstructionFunction> {
         0x3 => Some(i_3xkk_SE_Vx_byte),
         0x4 => Some(i_4xkk_SNE_Vx_byte),
 
+        #[allow(clippy::single_match_else)]
         0x5 => match op.get_n() {
             0x0 => Some(i_5xy0_SE_Vx_Vy),
             _ => {
@@ -105,6 +106,7 @@ pub fn get_instruction_function(op: &Opcode) -> Option<InstructionFunction> {
             }
         },
 
+        #[allow(clippy::single_match_else)]
         0x9 => match op.get_n() {
             0x0 => Some(i_9xy0_SNE_Vx_Vy),
             _ => {
@@ -148,91 +150,91 @@ pub fn get_instruction_function(op: &Opcode) -> Option<InstructionFunction> {
 }
 
 fn invalid_instruction_called() {
-    eprintln!("Error: Invalid instruction called.");
+    eprintln!("Invalid instruction called.");
 }
 
 #[allow(non_snake_case)]
-fn i_00E0_CLS(this: &CPU, _: &Opcode) -> bool {
+fn i_00E0_CLS(this: &Cpu, _: &Opcode) -> bool {
     this.gpu.clear_framebuffer();
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_00EE_RET(this: &CPU, _op: &Opcode) -> bool {
+fn i_00EE_RET(this: &Cpu, _op: &Opcode) -> bool {
     let Some(new_addr) = this.ram.pop_from_stack() else {
         return false;
     };
 
     this.set_pc(new_addr);
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_1nnn_JP_addr(this: &CPU, op: &Opcode) -> bool {
+fn i_1nnn_JP_addr(this: &Cpu, op: &Opcode) -> bool {
     this.set_pc(op.get_addr());
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_2nnn_CALL_addr(this: &CPU, op: &Opcode) -> bool {
+fn i_2nnn_CALL_addr(this: &Cpu, op: &Opcode) -> bool {
     let mut pc = this.get_pc_ref();
     this.ram.push_to_stack(*pc);
     *pc = op.get_addr();
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_3xkk_SE_Vx_byte(this: &CPU, op: &Opcode) -> bool {
+fn i_3xkk_SE_Vx_byte(this: &Cpu, op: &Opcode) -> bool {
     if this.get_v_reg(op.get_x()) == op.get_kk() {
         this.increment_pc();
     }
 
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_4xkk_SNE_Vx_byte(this: &CPU, op: &Opcode) -> bool {
+fn i_4xkk_SNE_Vx_byte(this: &Cpu, op: &Opcode) -> bool {
     if this.get_v_reg(op.get_x()) != op.get_kk() {
         this.increment_pc();
     }
 
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_5xy0_SE_Vx_Vy(this: &CPU, op: &Opcode) -> bool {
+fn i_5xy0_SE_Vx_Vy(this: &Cpu, op: &Opcode) -> bool {
     let (vx, vy) = this.get_v_reg_xy(op.get_x(), op.get_y());
 
     if vx == vy {
         this.increment_pc();
     }
 
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_6xkk_LD_Vx_byte(this: &CPU, op: &Opcode) -> bool {
+fn i_6xkk_LD_Vx_byte(this: &Cpu, op: &Opcode) -> bool {
     this.set_v_reg(op.get_x(), op.get_kk());
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_7xkk_ADD_Vx_byte(this: &CPU, op: &Opcode) -> bool {
+fn i_7xkk_ADD_Vx_byte(this: &Cpu, op: &Opcode) -> bool {
     let x = op.get_x_usize();
     let mut v = this.get_v_regs_ref();
     v[x] = v[x].wrapping_add(op.get_kk());
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_8xy0_LD_Vx_Vy(this: &CPU, op: &Opcode) -> bool {
+fn i_8xy0_LD_Vx_Vy(this: &Cpu, op: &Opcode) -> bool {
     let mut v = this.get_v_regs_ref();
     v[op.get_x_usize()] = v[op.get_y_usize()];
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_8xy1_OR_Vx_Vy(this: &CPU, op: &Opcode) -> bool {
+fn i_8xy1_OR_Vx_Vy(this: &Cpu, op: &Opcode) -> bool {
     let mut v = this.get_v_regs_ref();
     v[op.get_x_usize()] |= v[op.get_y_usize()];
 
@@ -240,11 +242,11 @@ fn i_8xy1_OR_Vx_Vy(this: &CPU, op: &Opcode) -> bool {
         v[0xF] = 0;
     }
 
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_8xy2_AND_Vx_Vy(this: &CPU, op: &Opcode) -> bool {
+fn i_8xy2_AND_Vx_Vy(this: &Cpu, op: &Opcode) -> bool {
     let mut v = this.get_v_regs_ref();
     v[op.get_x_usize()] &= v[op.get_y_usize()];
 
@@ -252,11 +254,11 @@ fn i_8xy2_AND_Vx_Vy(this: &CPU, op: &Opcode) -> bool {
         v[0xF] = 0;
     }
 
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_8xy3_XOR_Vx_Vy(this: &CPU, op: &Opcode) -> bool {
+fn i_8xy3_XOR_Vx_Vy(this: &Cpu, op: &Opcode) -> bool {
     let mut v = this.get_v_regs_ref();
     v[op.get_x_usize()] ^= v[op.get_y_usize()];
 
@@ -264,71 +266,73 @@ fn i_8xy3_XOR_Vx_Vy(this: &CPU, op: &Opcode) -> bool {
         v[0xF] = 0;
     }
 
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_8xy4_ADD_Vx_Vy(this: &CPU, op: &Opcode) -> bool {
+fn i_8xy4_ADD_Vx_Vy(this: &Cpu, op: &Opcode) -> bool {
     let (x, y) = op.get_x_and_y_usize();
     let mut v = this.get_v_regs_ref();
     let (val, wrapped) = v[x].overflowing_add(v[y]);
     v[x] = val;
-    v[0xF] = wrapped as u8;
-    return false;
+    v[0xF] = u8::from(wrapped);
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_8xy5_SUB_Vx_Vy(this: &CPU, op: &Opcode) -> bool {
+fn i_8xy5_SUB_Vx_Vy(this: &Cpu, op: &Opcode) -> bool {
     let (x, y) = (op.get_x_usize(), op.get_y_usize());
     let mut v = this.get_v_regs_ref();
     let (val, wrapped) = v[x].overflowing_sub(v[y]);
     v[x] = val;
-    v[0xF] = (!wrapped) as u8;
-    return false;
+    v[0xF] = u8::from(!wrapped);
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_8xy6_SHR_Vx(this: &CPU, op: &Opcode) -> bool {
+fn i_8xy6_SHR_Vx(this: &Cpu, op: &Opcode) -> bool {
     let (x, y) = (op.get_x_usize(), op.get_y_usize());
     let mut v = this.get_v_regs_ref();
 
-    let v_used = match this.config.use_new_shift_instruction {
-        true => v[x],
-        false => v[y],
+    let v_used = if this.config.use_new_shift_instruction {
+        v[x]
+    } else {
+        v[y]
     };
 
     v[x] = v_used >> 1;
     v[0xF] = v_used & 1;
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_8xy7_SUBN_Vx_Vy(this: &CPU, op: &Opcode) -> bool {
+fn i_8xy7_SUBN_Vx_Vy(this: &Cpu, op: &Opcode) -> bool {
     let (x, y) = (op.get_x_usize(), op.get_y_usize());
     let mut v = this.get_v_regs_ref();
     let (val, wrapped) = v[y].overflowing_sub(v[x]);
     v[x] = val;
-    v[0xF] = (!wrapped) as u8;
-    return false;
+    v[0xF] = u8::from(!wrapped);
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_8xyE_SHL_Vx(this: &CPU, op: &Opcode) -> bool {
+fn i_8xyE_SHL_Vx(this: &Cpu, op: &Opcode) -> bool {
     let (x, y) = (op.get_x_usize(), op.get_y_usize());
     let mut v = this.get_v_regs_ref();
 
-    let v_used = match this.config.use_new_shift_instruction {
-        true => v[x],
-        false => v[y],
+    let v_used = if this.config.use_new_shift_instruction {
+        v[x]
+    } else {
+        v[y]
     };
 
     v[x] = v_used << 1;
     v[0xF] = (v_used & 0x80) >> 7;
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_9xy0_SNE_Vx_Vy(this: &CPU, op: &Opcode) -> bool {
+fn i_9xy0_SNE_Vx_Vy(this: &Cpu, op: &Opcode) -> bool {
     let (x, y) = (op.get_x_usize(), op.get_y_usize());
     let v = this.get_v_regs_ref();
 
@@ -336,95 +340,100 @@ fn i_9xy0_SNE_Vx_Vy(this: &CPU, op: &Opcode) -> bool {
         this.increment_pc();
     }
 
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_Annn_LD_I_addr(this: &CPU, op: &Opcode) -> bool {
+fn i_Annn_LD_I_addr(this: &Cpu, op: &Opcode) -> bool {
     this.set_index_reg(op.get_addr());
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_Bnnn_JP_V0_addr(this: &CPU, op: &Opcode) -> bool {
-    this.set_pc(match this.config.use_new_jump_instruction {
-        true => this.get_v_reg(op.get_x()) as u16 + op.get_addr(),
-        false => this.get_v_reg(0) as u16 + op.get_addr(),
+fn i_Bnnn_JP_V0_addr(this: &Cpu, op: &Opcode) -> bool {
+    this.set_pc(if this.config.use_new_jump_instruction {
+        u16::from(this.get_v_reg(op.get_x())) + op.get_addr()
+    } else {
+        u16::from(this.get_v_reg(0)) + op.get_addr()
     });
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_Cxkk_RND_Vx_byte(this: &CPU, op: &Opcode) -> bool {
+fn i_Cxkk_RND_Vx_byte(this: &Cpu, op: &Opcode) -> bool {
     this.set_v_reg(op.get_x(), op.get_kk() & fastrand::u8(..));
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_Dxyn_DRW_Vx_Vy_nibble(this: &CPU, op: &Opcode) -> bool {
-    let Some(sprite) = this.ram.read_bytes(this.get_index_reg(), op.get_n() as u16) else {
+fn i_Dxyn_DRW_Vx_Vy_nibble(this: &Cpu, op: &Opcode) -> bool {
+    let Some(sprite) = this
+        .ram
+        .read_bytes(this.get_index_reg(), u16::from(op.get_n()))
+    else {
         return false;
     };
 
     let (x, y) = op.get_x_and_y_usize();
     let mut v = this.get_v_regs_ref();
-    v[0xF] = this.gpu.draw_sprite(sprite, v[x], v[y]) as u8;
+    v[0xF] = u8::from(this.gpu.draw_sprite(&sprite, v[x], v[y]));
 
     if this.config.limit_to_one_draw_per_frame {
         this.gpu.wait_for_render();
         return true;
     }
 
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_Ex9E_SKP_Vx(this: &CPU, op: &Opcode) -> bool {
+fn i_Ex9E_SKP_Vx(this: &Cpu, op: &Opcode) -> bool {
     if this.input_manager.get_key_state(this.get_v_reg(op.get_x())) {
         this.increment_pc();
     }
 
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_ExA1_SKNP_Vx(this: &CPU, op: &Opcode) -> bool {
+fn i_ExA1_SKNP_Vx(this: &Cpu, op: &Opcode) -> bool {
     if !this.input_manager.get_key_state(this.get_v_reg(op.get_x())) {
         this.increment_pc();
     }
 
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_Fx07_LD_Vx_DT(this: &CPU, op: &Opcode) -> bool {
+fn i_Fx07_LD_Vx_DT(this: &Cpu, op: &Opcode) -> bool {
     this.set_v_reg(op.get_x(), this.delay_timer.get_value());
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_Fx0A_LD_Vx_K(this: &CPU, op: &Opcode) -> bool {
+fn i_Fx0A_LD_Vx_K(this: &Cpu, op: &Opcode) -> bool {
     this.set_v_reg(op.get_x(), this.input_manager.get_next_key_press());
-    return true;
+    true
 }
 
 #[allow(non_snake_case)]
-fn i_Fx15_LD_DT_Vx(this: &CPU, op: &Opcode) -> bool {
+fn i_Fx15_LD_DT_Vx(this: &Cpu, op: &Opcode) -> bool {
     this.delay_timer.set_value(this.get_v_reg(op.get_x()));
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_Fx18_LD_ST_Vx(this: &CPU, op: &Opcode) -> bool {
+fn i_Fx18_LD_ST_Vx(this: &Cpu, op: &Opcode) -> bool {
     this.sound_timer.set_value(this.get_v_reg(op.get_x()));
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_Fx1E_ADD_I_Vx(this: &CPU, op: &Opcode) -> bool {
+fn i_Fx1E_ADD_I_Vx(this: &Cpu, op: &Opcode) -> bool {
     let mut v = this.get_v_regs_ref();
 
-    let Some(index_out_of_range) = this.increment_index_reg_by(v[op.get_x_usize()] as u16) else {
+    let Some(index_out_of_range) = this.increment_index_reg_by(u16::from(v[op.get_x_usize()]))
+    else {
         return false;
     };
 
@@ -432,29 +441,30 @@ fn i_Fx1E_ADD_I_Vx(this: &CPU, op: &Opcode) -> bool {
         v[0xF] = 1;
     }
 
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_Fx29_LD_F_Vx(this: &CPU, op: &Opcode) -> bool {
-    if cfg!(debug_assertions) && op.get_x() > 0xF {
-        panic!("Error: Should not be possible to query for two-character hex digits");
-    }
+fn i_Fx29_LD_F_Vx(this: &Cpu, op: &Opcode) -> bool {
+    debug_assert!(
+        op.get_x() <= 0xF,
+        "Should not be possible to query for two-character hex digits"
+    );
 
     this.set_index_reg(this.ram.get_hex_digit_address(this.get_v_reg(op.get_x())));
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_Fx33_LD_B_Vx(this: &CPU, op: &Opcode) -> bool {
+fn i_Fx33_LD_B_Vx(this: &Cpu, op: &Opcode) -> bool {
     let vx = this.get_v_reg(op.get_x());
     let bcd = vec![vx / 100, (vx / 10) % 10, vx % 10];
     this.ram.write_bytes(&bcd, this.get_index_reg());
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_Fx55_LD_I_Vx(this: &CPU, op: &Opcode) -> bool {
+fn i_Fx55_LD_I_Vx(this: &Cpu, op: &Opcode) -> bool {
     let x = op.get_x();
     let index = this.get_index_reg_ref();
 
@@ -462,26 +472,26 @@ fn i_Fx55_LD_I_Vx(this: &CPU, op: &Opcode) -> bool {
         .write_bytes(&this.get_v_reg_range(0..=x as usize), *index);
 
     if this.config.move_index_with_reads {
-        this.increment_index_reg_ref_by(index, x as u16 + 1);
+        this.increment_index_reg_ref_by(index, u16::from(x) + 1);
     }
 
-    return false;
+    false
 }
 
 #[allow(non_snake_case)]
-fn i_Fx65_LD_Vx_I(this: &CPU, op: &Opcode) -> bool {
+fn i_Fx65_LD_Vx_I(this: &Cpu, op: &Opcode) -> bool {
     let x = op.get_x();
     let index = this.get_index_reg_ref();
 
-    let Some(bytes) = this.ram.read_bytes(*index, x as u16 + 1) else {
+    let Some(bytes) = this.ram.read_bytes(*index, u16::from(x) + 1) else {
         return false;
     };
 
     this.set_v_reg_range(0, &bytes);
 
     if this.config.move_index_with_reads {
-        this.increment_index_reg_ref_by(index, x as u16 + 1);
+        this.increment_index_reg_ref_by(index, u16::from(x) + 1);
     }
 
-    return false;
+    false
 }

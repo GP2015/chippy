@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 pub const PROGRAM_START_ADDRESS: u16 = 0x200;
 pub const HEAP_SIZE: usize = 0x1000;
 
-pub struct RAM {
+pub struct Ram {
     active: Arc<AtomicBool>,
     config: RAMConfig,
     heap: Mutex<[u8; HEAP_SIZE]>,
@@ -14,16 +14,16 @@ pub struct RAM {
     stack_ptr: AtomicUsize,
 }
 
-impl RAM {
+impl Ram {
     pub fn try_new(active: Arc<AtomicBool>, config: RAMConfig) -> Option<Arc<Self>> {
         if config.stack_size == 0 {
-            eprintln!("Error: The stack size must be greater than zero.");
+            eprintln!("The stack size must be greater than zero.");
             active.store(false, Ordering::Relaxed);
             return None;
         }
 
         if config.font_starting_address > 0xFB0 {
-            eprintln!("Error: The starting address of the font data cannot be greater than 0xFB0.");
+            eprintln!("The starting address of the font data cannot be greater than 0xFB0.");
             active.store(false, Ordering::Relaxed);
             return None;
         }
@@ -40,7 +40,7 @@ impl RAM {
         this.heap.lock().unwrap()[font_start_addr..font_start_addr + 80]
             .copy_from_slice(&this.config.font_data);
 
-        return Some(Arc::new(this));
+        Some(Arc::new(this))
     }
 
     #[cfg(test)]
@@ -74,8 +74,8 @@ impl RAM {
     }
 
     pub fn load_program(&self, program_path: &String) -> bool {
-        let Ok(program) = fs::read(&program_path) else {
-            eprintln!("Error: Could not find valid program at {program_path}.");
+        let Ok(program) = fs::read(program_path) else {
+            eprintln!("Could not find valid program at {program_path}.");
             self.active.store(false, Ordering::Relaxed);
             return false;
         };
@@ -83,7 +83,7 @@ impl RAM {
         let start_index = PROGRAM_START_ADDRESS as usize;
 
         if start_index + program.len() > HEAP_SIZE {
-            eprintln!("Error: Program {program_path} is too large to fit in the heap.");
+            eprintln!("Program {program_path} is too large to fit in the heap.");
             self.active.store(false, Ordering::Relaxed);
             return false;
         }
@@ -91,15 +91,16 @@ impl RAM {
         self.heap.lock().unwrap()[start_index..start_index + program.len()]
             .copy_from_slice(&program);
 
-        return true;
+        true
     }
 
     pub fn get_hex_digit_address(&self, digit: u8) -> u16 {
-        if cfg!(debug_assertions) && digit > 0xF {
-            panic!("Error: Should not be possible to query for two-character hex digits.");
-        }
+        debug_assert!(
+            digit <= 0xF,
+            "Should not be possible to query for two-character hex digits."
+        );
 
-        return self.config.font_starting_address + ((digit as u16) * 5);
+        self.config.font_starting_address + (u16::from(digit) * 5)
     }
 
     #[cfg(test)]
@@ -108,7 +109,7 @@ impl RAM {
 
         if addr >= HEAP_SIZE {
             if !self.config.allow_heap_overflow {
-                eprintln!("Error: Attempting to write to non-existent memory.");
+                eprintln!("Attempting to write to non-existent memory.");
                 self.active.store(false, Ordering::Relaxed);
                 return false;
             }
@@ -117,17 +118,17 @@ impl RAM {
         }
 
         let mut heap = self.heap.lock().unwrap();
-        heap[addr as usize] = val;
-        return true;
+        heap[addr] = val;
+        true
     }
 
-    pub fn write_bytes(&self, vals: &Vec<u8>, addr: u16) -> bool {
+    pub fn write_bytes(&self, vals: &[u8], addr: u16) -> bool {
         let mut addr = addr as usize;
         let count = vals.len();
 
         if addr >= HEAP_SIZE {
             if !self.config.allow_heap_overflow {
-                eprintln!("Error: Heap overflowed while writing.");
+                eprintln!("Heap overflowed while writing.");
                 self.active.store(false, Ordering::Relaxed);
                 return false;
             }
@@ -137,7 +138,7 @@ impl RAM {
 
         if addr + count > HEAP_SIZE {
             if !self.config.allow_heap_overflow {
-                eprintln!("Error: Heap overflowed while writing.");
+                eprintln!("Heap overflowed while writing.");
                 self.active.store(false, Ordering::Relaxed);
                 return false;
             }
@@ -153,9 +154,9 @@ impl RAM {
         }
 
         let mut heap = self.heap.lock().unwrap();
-        heap[addr..addr + count].copy_from_slice(&vals);
+        heap[addr..addr + count].copy_from_slice(vals);
 
-        return true;
+        true
     }
 
     #[cfg(test)]
@@ -164,7 +165,7 @@ impl RAM {
 
         if addr >= HEAP_SIZE {
             if !self.config.allow_heap_overflow {
-                eprintln!("Error: Attempting to read from non-existent memory.");
+                eprintln!("Attempting to read from non-existent memory.");
                 self.active.store(false, Ordering::Relaxed);
                 return None;
             }
@@ -173,7 +174,7 @@ impl RAM {
         }
 
         let heap = self.heap.lock().unwrap();
-        return Some(heap[addr]);
+        Some(heap[addr])
     }
 
     pub fn read_bytes(&self, addr: u16, count: u16) -> Option<Vec<u8>> {
@@ -182,7 +183,7 @@ impl RAM {
 
         if addr >= HEAP_SIZE {
             if !self.config.allow_heap_overflow {
-                eprintln!("Error: Heap overflowed while writing.");
+                eprintln!("Heap overflowed while writing.");
                 self.active.store(false, Ordering::Relaxed);
                 return None;
             }
@@ -192,7 +193,7 @@ impl RAM {
 
         if addr + count > HEAP_SIZE {
             if !self.config.allow_heap_overflow {
-                eprintln!("Error: Heap overflowed while reading.");
+                eprintln!("Heap overflowed while reading.");
                 self.active.store(false, Ordering::Relaxed);
                 return None;
             }
@@ -209,7 +210,7 @@ impl RAM {
         }
 
         let heap = self.heap.lock().unwrap();
-        return Some(heap[addr..addr + count].to_vec());
+        Some(heap[addr..addr + count].to_vec())
     }
 
     pub fn push_to_stack(&self, val: u16) -> bool {
@@ -219,7 +220,7 @@ impl RAM {
 
         if stack_ptr == self.config.stack_size {
             if !self.config.allow_stack_overflow {
-                eprintln!("Error: Stack overflowed while pushing.");
+                eprintln!("Stack overflowed while pushing.");
                 self.active.store(false, Ordering::Relaxed);
                 return false;
             }
@@ -233,7 +234,7 @@ impl RAM {
         stack[stack_ptr] = val;
         self.stack_ptr.store(stack_ptr + 1, Ordering::Relaxed);
 
-        return true;
+        true
     }
 
     pub fn pop_from_stack(&self) -> Option<u16> {
@@ -243,7 +244,7 @@ impl RAM {
 
         if stack_ptr == 0 {
             if !self.config.allow_stack_overflow {
-                eprintln!("Error: Stack overflowed while popping.");
+                eprintln!("Stack overflowed while popping.");
                 self.active.store(false, Ordering::Relaxed);
                 return None;
             }
@@ -255,7 +256,7 @@ impl RAM {
 
         self.stack_ptr.store(stack_ptr - 1, Ordering::Relaxed);
 
-        return Some(stack[stack_ptr - 1]);
+        Some(stack[stack_ptr - 1])
     }
 }
 
@@ -263,19 +264,20 @@ impl RAM {
 mod tests {
     use super::*;
 
+    #[derive(Clone, Copy)]
     enum ConfigType {
         Conservative,
         Liberal,
     }
 
-    fn create_objects(cfg_type: ConfigType) -> (Arc<RAM>, Arc<AtomicBool>) {
+    fn create_objects(cfg_type: ConfigType) -> (Arc<Ram>, Arc<AtomicBool>) {
         let active = Arc::new(AtomicBool::new(true));
         let ram = match cfg_type {
-            ConfigType::Conservative => RAM::new_default_conservative(active.clone()),
-            ConfigType::Liberal => RAM::new_default_liberal(active.clone()),
+            ConfigType::Conservative => Ram::new_default_conservative(active.clone()),
+            ConfigType::Liberal => Ram::new_default_liberal(active.clone()),
         };
 
-        return (ram, active);
+        (ram, active)
     }
 
     #[test]
@@ -346,8 +348,8 @@ mod tests {
 
         let ideal_bytes = vec![0x48, 0x65, 0x6c, 0x6c, 0x6f];
 
-        assert!(ram.write_bytes(&ideal_bytes[..3].to_vec(), 0xFFD));
-        assert!(ram.write_bytes(&ideal_bytes[3..].to_vec(), 0x000));
+        assert!(ram.write_bytes(&ideal_bytes[..3], 0xFFD));
+        assert!(ram.write_bytes(&ideal_bytes[3..], 0x000));
 
         let actual_bytes = ram.read_bytes(0xFFD, 5).unwrap();
 
@@ -359,10 +361,10 @@ mod tests {
     fn test_read_memory_with_failed_overflow() {
         let (ram, active) = create_objects(ConfigType::Conservative);
 
-        let ideal_bytes = vec![0x48, 0x65, 0x6c, 0x6c, 0x6f];
+        let ideal_bytes = [0x48, 0x65, 0x6c, 0x6c, 0x6f];
 
-        assert!(ram.write_bytes(&ideal_bytes[..3].to_vec(), 0xFFD));
-        assert!(ram.write_bytes(&ideal_bytes[3..].to_vec(), 0x000));
+        assert!(ram.write_bytes(&ideal_bytes[..3], 0xFFD));
+        assert!(ram.write_bytes(&ideal_bytes[3..], 0x000));
 
         assert!(ram.read_bytes(0xFFD, 5).is_none());
         assert!(!active.load(Ordering::Relaxed));
@@ -374,8 +376,8 @@ mod tests {
 
         let ideal_bytes = vec![0x48, 0x65, 0x6c, 0x6c, 0x6f];
 
-        assert!(ram.write_bytes(&ideal_bytes[..3].to_vec(), 0xFFD));
-        assert!(ram.write_bytes(&ideal_bytes[3..].to_vec(), 0x000));
+        assert!(ram.write_bytes(&ideal_bytes[..3], 0xFFD));
+        assert!(ram.write_bytes(&ideal_bytes[3..], 0x000));
 
         let actual_bytes = ram.read_bytes(0xFFD, 5).unwrap();
 

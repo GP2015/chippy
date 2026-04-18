@@ -9,9 +9,7 @@ pub struct Limiter {
 
 impl Limiter {
     pub fn new(freq: f64, catch_up: bool) -> Self {
-        if freq <= 0.0 {
-            panic!("Frequency of limiters must be greater than 0.");
-        }
+        assert!(freq > 0.0, "Frequency of limiters must be greater than 0.");
 
         Self {
             delay: time::Duration::from_secs_f64(1.0 / freq),
@@ -27,15 +25,13 @@ impl Limiter {
             thread::sleep(self.target - current);
         }
 
-        self.target = match self.catch_up {
-            false => time::Instant::now(),
-            true => match self.target.checked_add(self.delay) {
-                Some(t) => t,
-                None => {
-                    eprintln!("Error: Failed to catch-up limiter.");
-                    time::Instant::now()
-                }
-            },
+        self.target = if self.catch_up {
+            self.target.checked_add(self.delay).unwrap_or({
+                eprintln!("Failed to catch-up limiter.");
+                time::Instant::now()
+            })
+        } else {
+            time::Instant::now()
         }
     }
 

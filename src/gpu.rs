@@ -6,7 +6,7 @@ use std::time::Duration;
 
 const CONDVAR_WAIT_TIMEOUT: Duration = Duration::from_millis(100);
 
-pub struct GPU {
+pub struct Gpu {
     active: Arc<AtomicBool>,
     config: GPUConfig,
     framebuffer: Mutex<Vec<bool>>,
@@ -14,24 +14,23 @@ pub struct GPU {
     render_queue_cvar: Condvar,
 }
 
-impl GPU {
+impl Gpu {
     pub fn try_new(active: Arc<AtomicBool>, config: GPUConfig) -> Option<Arc<Self>> {
         if config.render_occasion == RenderOccasion::Frequency && config.render_frequency <= 0.0 {
-            eprintln!("Error: The graphic render frequency must be greater than 0.");
+            eprintln!("The graphic render frequency must be greater than 0.");
             active.store(false, Ordering::Relaxed);
             return None;
         }
 
-        let framebuffer_size =
-            config.horizontal_resolution as usize * config.vertical_resolution as usize;
+        let framebuffer_size = config.horizontal_resolution * config.vertical_resolution;
 
-        return Some(Arc::new(Self {
+        Some(Arc::new(Self {
             active,
             config,
             framebuffer: Mutex::new(vec![false; framebuffer_size]),
             render_queued: Mutex::new(false),
             render_queue_cvar: Condvar::new(),
-        }));
+        }))
     }
 
     #[cfg(test)]
@@ -73,7 +72,7 @@ impl GPU {
     // }
 
     pub fn should_render_separately(&self) -> bool {
-        return self.config.render_occasion == RenderOccasion::Frequency;
+        self.config.render_occasion == RenderOccasion::Frequency
     }
 
     pub fn run_separate_render(&self) {
@@ -87,30 +86,30 @@ impl GPU {
     }
 
     pub fn get_screen_resolution(&self) -> (usize, usize) {
-        return (
+        (
             self.config.horizontal_resolution,
             self.config.vertical_resolution,
-        );
+        )
     }
 
     pub fn get_active_color(&self) -> u32 {
-        return self.config.pixel_color_when_active;
+        self.config.pixel_color_when_active
     }
 
     pub fn get_inactive_color(&self) -> u32 {
-        return self.config.pixel_color_when_inactive;
+        self.config.pixel_color_when_inactive
     }
 
     pub fn get_border_color(&self) -> u32 {
-        return self.config.screen_border_color;
+        self.config.screen_border_color
     }
 
     pub fn get_framebuffer(&self) -> MutexGuard<'_, Vec<bool>> {
-        return self.framebuffer.lock().unwrap();
+        self.framebuffer.lock().unwrap()
     }
 
     pub fn is_render_queued(&self) -> bool {
-        return *self.render_queued.lock().unwrap();
+        *self.render_queued.lock().unwrap()
     }
 
     pub fn queue_render(&self) {
@@ -141,10 +140,11 @@ impl GPU {
         }
     }
 
-    pub fn draw_sprite(&self, sprite: Vec<u8>, x_pos: u8, y_pos: u8) -> bool {
-        if cfg!(debug_assertions) && sprite.len() > 15 {
-            panic!("Error: Should not be draw a sprite larger than 16 bytes.");
-        }
+    pub fn draw_sprite(&self, sprite: &[u8], x_pos: u8, y_pos: u8) -> bool {
+        debug_assert!(
+            sprite.len() < 16,
+            "Should not be draw a sprite larger than 16 bytes."
+        );
 
         let mut x_pos = x_pos as usize;
         let mut y_pos = y_pos as usize;
@@ -152,19 +152,17 @@ impl GPU {
         if self.config.wrap_sprite_positions {
             x_pos %= self.config.horizontal_resolution;
             y_pos %= self.config.vertical_resolution;
-        } else {
-            if x_pos >= self.config.horizontal_resolution
-                || y_pos >= self.config.vertical_resolution
-            {
-                return false;
-            }
+        } else if x_pos >= self.config.horizontal_resolution
+            || y_pos >= self.config.vertical_resolution
+        {
+            return false;
         }
 
         let mut collided = false;
         let mut framebuffer = self.framebuffer.lock().unwrap();
 
-        for i in 0..sprite.len() {
-            if self.draw_byte(&mut framebuffer, sprite[i], x_pos, y_pos + i) {
+        for (i, &pix) in sprite.iter().enumerate() {
+            if self.draw_byte(&mut framebuffer, pix, x_pos, y_pos + i) {
                 collided = true;
             }
         }
@@ -173,7 +171,7 @@ impl GPU {
             self.queue_render();
         }
 
-        return collided;
+        collided
     }
 
     fn draw_byte(
@@ -198,7 +196,7 @@ impl GPU {
             }
         }
 
-        return collided;
+        collided
     }
 
     fn draw_pixel(
@@ -207,22 +205,20 @@ impl GPU {
         mut x_pos: usize,
         mut y_pos: usize,
     ) -> Option<bool> {
-        let width = self.config.horizontal_resolution as usize;
-        let height = self.config.vertical_resolution as usize;
+        let width = self.config.horizontal_resolution;
+        let height = self.config.vertical_resolution;
 
         if self.config.wrap_sprite_pixels {
             x_pos %= width;
             y_pos %= height;
-        } else {
-            if x_pos >= width || y_pos >= height {
-                return None;
-            }
+        } else if x_pos >= width || y_pos >= height {
+            return None;
         }
 
-        let index = (y_pos * width + x_pos) as usize;
+        let index = y_pos * width + x_pos;
 
         let collision = framebuffer[index];
         framebuffer[index] ^= true;
-        return Some(collision);
+        Some(collision)
     }
 }

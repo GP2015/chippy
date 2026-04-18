@@ -31,15 +31,15 @@ pub struct InputManager {
 }
 
 impl InputManager {
-    pub fn try_new(active: Arc<AtomicBool>, config: InputConfig) -> Option<Arc<Self>> {
-        return Some(Arc::new(Self {
+    pub fn try_new(active: Arc<AtomicBool>, config: InputConfig) -> Arc<Self> {
+        Arc::new(Self {
             active,
             config,
             key_states: Mutex::new([false; 16]),
             newest_key_state: Mutex::new(NewestKeyState::Finished),
             newest_key: AtomicU8::new(0),
             newest_key_cvar: Condvar::new(),
-        }));
+        })
     }
 
     #[cfg(test)]
@@ -67,7 +67,6 @@ impl InputManager {
                 ],
             },
         )
-        .unwrap()
     }
 
     pub fn update_input(&self, input: &WinitInputHelper) {
@@ -96,9 +95,10 @@ impl InputManager {
     }
 
     pub fn get_key_state(&self, key_index: u8) -> bool {
-        if cfg!(debug_assertions) && key_index > 0xF {
-            panic!("Error: Should not be possible to read non-existent key_states.");
-        }
+        debug_assert!(
+            key_index <= 0xF,
+            "Should not be possible to read non-existent key_states."
+        );
 
         return self.key_states.lock().unwrap()[key_index as usize];
     }
@@ -126,6 +126,6 @@ impl InputManager {
         *newest_key_state = NewestKeyState::Finished;
         self.newest_key_cvar.notify_all();
 
-        return self.newest_key.load(Ordering::Acquire);
+        self.newest_key.load(Ordering::Acquire)
     }
 }

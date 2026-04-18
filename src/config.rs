@@ -1,7 +1,6 @@
 use serde::Deserialize;
 use serde_with::serde_as;
 use std::fs;
-use toml;
 use winit::keyboard::{Key, SmolStr};
 
 const CONFIG_FILE_PATH: &str = "config.toml";
@@ -64,13 +63,12 @@ fn deserialize_keys<'de, D>(deserializer: D) -> Result<[Key<SmolStr>; 16], D::Er
 where
     D: serde::Deserializer<'de>,
 {
-    let vec = Vec::<String>::deserialize(deserializer)?;
-    return vec
+    Vec::<String>::deserialize(deserializer)?
         .into_iter()
         .map(|key| Key::Character(SmolStr::new(key)))
         .collect::<Vec<_>>()
         .try_into()
-        .map_err(|_| serde::de::Error::custom("expected exactly 16 keys"));
+        .map_err(|_| serde::de::Error::custom("expected exactly 16 keys"))
 }
 
 #[derive(Deserialize, Debug)]
@@ -113,13 +111,13 @@ pub struct SoundTimerConfig {
 
 pub fn generate_configs() -> Option<Config> {
     let Ok(raw_config) = fs::read_to_string(CONFIG_FILE_PATH) else {
-        eprintln!("Error: Could not read config.toml at {}", CONFIG_FILE_PATH);
+        eprintln!("Could not read config.toml at {CONFIG_FILE_PATH}");
         return None;
     };
 
     let mut config: Config = toml::from_str(&raw_config)
         .map_err(|err| {
-            eprintln!("Error: Could not parse config.toml ({}).", err);
+            eprintln!("Could not parse config.toml ({err}).");
         })
         .ok()?;
 
@@ -128,7 +126,7 @@ pub fn generate_configs() -> Option<Config> {
         Preset::Custom => (),
     }
 
-    return Some(config);
+    Some(config)
 }
 
 fn enable_chip8_preset(config: &mut Config) {

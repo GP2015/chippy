@@ -1,3 +1,8 @@
+#![warn(clippy::pedantic)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::struct_excessive_bools)]
+#![allow(clippy::unreadable_literal)]
+
 mod config;
 mod cpu;
 mod emulib;
@@ -8,10 +13,10 @@ mod ram;
 mod timer;
 mod window;
 
-use crate::cpu::CPU;
-use crate::gpu::GPU;
+use crate::cpu::Cpu;
+use crate::gpu::Gpu;
 use crate::input::InputManager;
-use crate::ram::RAM;
+use crate::ram::Ram;
 use crate::timer::{DelayTimer, SoundTimer};
 use crate::window::WindowManager;
 use clap::Parser;
@@ -28,9 +33,9 @@ struct Args {
 
 struct Components {
     active: Arc<AtomicBool>,
-    cpu: Arc<CPU>,
-    gpu: Arc<GPU>,
-    ram: Arc<RAM>,
+    cpu: Arc<Cpu>,
+    gpu: Arc<Gpu>,
+    ram: Arc<Ram>,
     delay_timer: Arc<DelayTimer>,
     sound_timer: Arc<SoundTimer>,
     input_manager: Arc<InputManager>,
@@ -57,7 +62,7 @@ fn main() {
     let event_loop = match EventLoop::new() {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("Error: Failed to create event loop ({e}).");
+            eprintln!("Failed to create event loop ({e}).");
             return;
         }
     };
@@ -76,12 +81,15 @@ fn main() {
     handles.push(thread::spawn(move || comps.cpu.run()));
 
     if let Err(e) = event_loop.run_app(&mut window_manager) {
-        eprintln!("Error: Window manager event loop failed ({e}).");
+        eprintln!("Window manager event loop failed ({e}).");
         comps.active.store(false, Ordering::Release);
-    };
+    }
 
-    if cfg!(debug_assertions) && comps.active.load(Ordering::Relaxed) {
-        panic!("Event loop should not have exited while active is high.");
+    if cfg!(debug_assertions) {
+        assert!(
+            !comps.active.load(Ordering::Relaxed),
+            "Event loop should not have exited while active is high."
+        );
     }
 
     for handle in handles {
@@ -96,10 +104,10 @@ fn create_components() -> Option<Components> {
     let active = Arc::new(AtomicBool::new(true));
     let delay_timer = DelayTimer::try_new(active.clone(), config.delay_timer)?;
     let sound_timer = SoundTimer::try_new(active.clone(), config.sound_timer)?;
-    let input_manager = InputManager::try_new(active.clone(), config.input)?;
-    let ram = RAM::try_new(active.clone(), config.ram)?;
-    let gpu = GPU::try_new(active.clone(), config.gpu)?;
-    let cpu = CPU::try_new(
+    let input_manager = InputManager::try_new(active.clone(), config.input);
+    let ram = Ram::try_new(active.clone(), config.ram)?;
+    let gpu = Gpu::try_new(active.clone(), config.gpu)?;
+    let cpu = Cpu::try_new(
         active.clone(),
         config.cpu,
         gpu.clone(),
@@ -109,7 +117,7 @@ fn create_components() -> Option<Components> {
         input_manager.clone(),
     )?;
 
-    return Some(Components {
+    Some(Components {
         active,
         cpu,
         gpu,
@@ -117,5 +125,5 @@ fn create_components() -> Option<Components> {
         delay_timer,
         sound_timer,
         input_manager,
-    });
+    })
 }
