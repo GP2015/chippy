@@ -1,15 +1,20 @@
 [package]
-name = "chip8rust"
+name = "chippy"
 version = "0.1.0"
 edition = "2024"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
 
 [dependencies]
 clap = { version = "4.5.48", features = ["derive"] }
 fastrand = "2.3.0"
-rodio = "0.21.1"
+mimalloc = "0.1.52"
+rodio = "0.23.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_with = "3.14.1"
 softbuffer = "0.4.6"
-toml = "0.9.7"
-winit = {version = "0.30.12", features = ["serde", "rwh_05"]}
+toml = "1.1.8"
+winit = { version = "0.30.12", features = ["serde", "rwh_05"] }
 winit_input_helper = "0.17.0"

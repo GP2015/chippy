@@ -1,7 +1,11 @@
 use crate::config::InputConfig;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
-use std::time::Duration;
+use std::{
+    sync::{
+        Arc, Condvar, Mutex,
+        atomic::{AtomicBool, AtomicU8, Ordering},
+    },
+    time::Duration,
+};
 use winit_input_helper::WinitInputHelper;
 
 #[cfg(test)]
@@ -13,7 +17,7 @@ use winit::keyboard::SmolStr;
 const NUMBER_OF_INPUTS: usize = 16;
 const CONDVAR_WAIT_TIMEOUT: Duration = Duration::from_millis(100);
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 enum NewestKeyState {
     Finished,
     Requested,
@@ -21,6 +25,7 @@ enum NewestKeyState {
     Sent,
 }
 
+#[derive(Debug)]
 pub struct InputManager {
     active: Arc<AtomicBool>,
     config: InputConfig,
@@ -31,20 +36,20 @@ pub struct InputManager {
 }
 
 impl InputManager {
-    pub fn try_new(active: Arc<AtomicBool>, config: InputConfig) -> Option<Arc<Self>> {
-        return Some(Arc::new(Self {
+    pub fn new(active: Arc<AtomicBool>, config: InputConfig) -> Arc<Self> {
+        Arc::new(Self {
             active,
             config,
             key_states: Mutex::new([false; 16]),
             newest_key_state: Mutex::new(NewestKeyState::Finished),
             newest_key: AtomicU8::new(0),
             newest_key_cvar: Condvar::new(),
-        }));
+        })
     }
 
     #[cfg(test)]
     pub fn new_default(active: Arc<AtomicBool>) -> Arc<Self> {
-        Self::try_new(
+        Self::new(
             active,
             InputConfig {
                 key_bindings: [
@@ -67,7 +72,6 @@ impl InputManager {
                 ],
             },
         )
-        .unwrap()
     }
 
     pub fn update_input(&self, input: &WinitInputHelper) {
@@ -79,7 +83,8 @@ impl InputManager {
                 key_states[i] = true;
 
                 if *newest_key_state == NewestKeyState::Requested {
-                    self.newest_key.store(i as u8, Ordering::Release);
+                    self.newest_key
+                        .store(i.try_into().unwrap(), Ordering::Release);
                     *newest_key_state = NewestKeyState::Held;
                 }
             } else if input.key_released_logical(self.config.key_bindings[i].as_ref()) {
@@ -92,13 +97,17 @@ impl InputManager {
             }
         }
 
+        drop(key_states);
+        drop(newest_key_state);
+
         self.newest_key_cvar.notify_all();
     }
 
     pub fn get_key_state(&self, key_index: u8) -> bool {
-        if cfg!(debug_assertions) && key_index > 0xF {
-            panic!("Error: Should not be possible to read non-existent key_states.");
-        }
+        assert!(
+            key_index > 0xF,
+            "Should not be possible to read non-existent key_states."
+        );
 
         return self.key_states.lock().unwrap()[key_index as usize];
     }
@@ -124,8 +133,9 @@ impl InputManager {
         }
 
         *newest_key_state = NewestKeyState::Finished;
+        drop(newest_key_state);
         self.newest_key_cvar.notify_all();
 
-        return self.newest_key.load(Ordering::Acquire);
+        self.newest_key.load(Ordering::Acquire)
     }
 }

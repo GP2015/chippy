@@ -1,10 +1,20 @@
-use crate::config::{DelayTimerConfig, SoundTimerConfig, ToneWaveform};
-use crate::emulib::Limiter;
-use rodio::source;
-use rodio::{OutputStream, Sink};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use crate::{
+    config::{DelayTimerConfig, SoundTimerConfig, ToneWaveform},
+    emulib::Limiter,
+};
+use rodio::{
+    DeviceSinkBuilder, Player,
+    source::{SawtoothWave, SineWave, SquareWave, TriangleWave},
+};
+use std::{
+    eprintln,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU8, Ordering},
+    },
+};
 
+#[derive(Debug)]
 pub struct DelayTimer {
     active: Arc<AtomicBool>,
     config: DelayTimerConfig,
@@ -14,16 +24,16 @@ pub struct DelayTimer {
 impl DelayTimer {
     pub fn try_new(active: Arc<AtomicBool>, config: DelayTimerConfig) -> Option<Arc<Self>> {
         if config.delay_timer_decrement_rate <= 0.0 {
-            eprintln!("Error: The delay timer's decrement rate must be greater than zero.");
+            eprintln!("The delay timer's decrement rate must be greater than zero.");
             active.store(false, Ordering::Relaxed);
             return None;
         }
 
-        return Some(Arc::new(Self {
+        Some(Arc::new(Self {
             active,
             config,
             value: AtomicU8::new(0),
-        }));
+        }))
     }
 
     #[cfg(test)]
@@ -45,14 +55,14 @@ impl DelayTimer {
 
             let _ = self
                 .value
-                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
+                .try_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
                     if v > 0 { Some(v - 1) } else { None }
                 });
         }
     }
 
     pub fn get_value(&self) -> u8 {
-        return self.value.load(Ordering::Relaxed);
+        self.value.load(Ordering::Relaxed)
     }
 
     pub fn set_value(&self, val: u8) {
@@ -64,43 +74,41 @@ pub struct SoundTimer {
     active: Arc<AtomicBool>,
     config: SoundTimerConfig,
     value: AtomicU8,
-    _stream_handle: OutputStream,
-    sink: Sink,
+    player: Player,
 }
 
 impl SoundTimer {
     pub fn try_new(active: Arc<AtomicBool>, config: SoundTimerConfig) -> Option<Arc<Self>> {
         if config.sound_timer_decrement_rate <= 0.0 {
-            eprintln!("Error: The sound timer's decrement rate must be greater than zero.");
+            eprintln!("The sound timer's decrement rate must be greater than zero.");
             active.store(false, Ordering::Relaxed);
             return None;
         }
 
-        let stream_handle = match rodio::OutputStreamBuilder::open_default_stream() {
+        let device_sink = match DeviceSinkBuilder::open_default_sink() {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("Error: Failed to open audio stream ({e}).");
+                eprintln!("Failed to open audio stream ({e}).");
                 return None;
             }
         };
 
-        let sink = rodio::Sink::connect_new(&stream_handle.mixer());
-        sink.pause();
+        let player = Player::connect_new(device_sink.mixer());
+        player.pause();
 
         match config.tone_waveform {
-            ToneWaveform::Sine => sink.append(source::SineWave::new(config.tone_frequency)),
-            ToneWaveform::Square => sink.append(source::SquareWave::new(config.tone_frequency)),
-            ToneWaveform::Triangle => sink.append(source::TriangleWave::new(config.tone_frequency)),
-            ToneWaveform::Sawtooth => sink.append(source::SawtoothWave::new(config.tone_frequency)),
-        };
+            ToneWaveform::Sine => player.append(SineWave::new(config.tone_frequency)),
+            ToneWaveform::Square => player.append(SquareWave::new(config.tone_frequency)),
+            ToneWaveform::Triangle => player.append(TriangleWave::new(config.tone_frequency)),
+            ToneWaveform::Sawtooth => player.append(SawtoothWave::new(config.tone_frequency)),
+        }
 
-        return Some(Arc::new(Self {
+        Some(Arc::new(Self {
             active,
             value: AtomicU8::new(0),
-            sink,
-            _stream_handle: stream_handle,
+            player,
             config,
-        }));
+        }))
     }
 
     #[cfg(test)]
@@ -124,14 +132,14 @@ impl SoundTimer {
 
             let _ = self
                 .value
-                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
+                .try_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
                     if v > 0 { Some(v - 1) } else { None }
                 });
 
             if self.value.load(Ordering::Relaxed) > 0 {
-                self.sink.play();
+                self.player.play();
             } else {
-                self.sink.pause();
+                self.player.pause();
             }
         }
     }
@@ -152,16 +160,8 @@ mod tests {
         let timer = DelayTimer::new_default(active.clone());
         let timer_clone = timer.clone();
         let handle = thread::spawn(move || timer_clone.run());
-        return (timer, handle, active);
+        (timer, handle, active)
     }
-
-    // fn create_sound_objects() -> (Arc<SoundTimer>, JoinHandle<()>, Arc<AtomicBool>) {
-    //     let active = Arc::new(AtomicBool::new(true));
-    //     let timer = SoundTimer::new_default(active.clone());
-    //     let timer_clone = timer.clone();
-    //     let handle = thread::spawn(move || timer_clone.run());
-    //     return (timer, handle, active);
-    // }
 
     #[test]
     fn test_delay_timer_decrement() {

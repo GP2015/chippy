@@ -1,12 +1,22 @@
-use crate::config::{GPUConfig, RenderOccasion};
-use crate::emulib::Limiter;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
-use std::time::Duration;
+use crate::{
+    config::{GPUConfig, RenderOccasion},
+    emulib::Limiter,
+};
+use alloc::vec;
+use alloc::vec::Vec;
+use std::{
+    eprintln,
+    sync::{
+        Arc, Condvar, Mutex, MutexGuard,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
 
 const CONDVAR_WAIT_TIMEOUT: Duration = Duration::from_millis(100);
 
-pub struct GPU {
+#[derive(Debug)]
+pub struct Gpu {
     active: Arc<AtomicBool>,
     config: GPUConfig,
     framebuffer: Mutex<Vec<bool>>,
@@ -14,24 +24,23 @@ pub struct GPU {
     render_queue_cvar: Condvar,
 }
 
-impl GPU {
+impl Gpu {
     pub fn try_new(active: Arc<AtomicBool>, config: GPUConfig) -> Option<Arc<Self>> {
         if config.render_occasion == RenderOccasion::Frequency && config.render_frequency <= 0.0 {
-            eprintln!("Error: The graphic render frequency must be greater than 0.");
+            eprintln!("The graphic render frequency must be greater than 0.");
             active.store(false, Ordering::Relaxed);
             return None;
         }
 
-        let framebuffer_size =
-            config.horizontal_resolution as usize * config.vertical_resolution as usize;
+        let framebuffer_size = config.horizontal_resolution * config.vertical_resolution;
 
-        return Some(Arc::new(Self {
+        Some(Arc::new(Self {
             active,
             config,
-            framebuffer: Mutex::new(vec![false; framebuffer_size]),
+            framebuffer: Mutex::new(vec![false; framebuffer_size as usize]),
             render_queued: Mutex::new(false),
             render_queue_cvar: Condvar::new(),
-        }));
+        }))
     }
 
     #[cfg(test)]
@@ -46,34 +55,15 @@ impl GPU {
                 vertical_resolution: 32,
                 wrap_sprite_positions: true,
                 wrap_sprite_pixels: true,
-                render_occasion: RenderOccasion::Changes,
+                render_occasion: RenderOccasion::OnChanges,
                 render_frequency: 0.0,
             },
         )
         .unwrap()
     }
 
-    // #[cfg(test)]
-    // pub fn new_default_no_wrapping(active: Arc<AtomicBool>) -> Arc<Self> {
-    //     Self::try_new(
-    //         active,
-    //         GPUConfig {
-    //             pixel_color_when_active: 0xFFFFFF,
-    //             pixel_color_when_inactive: 0x000000,
-    //             screen_border_color: 0x777777,
-    //             horizontal_resolution: 64,
-    //             vertical_resolution: 32,
-    //             wrap_sprite_positions: false,
-    //             wrap_sprite_pixels: false,
-    //             render_occasion: RenderOccasion::Changes,
-    //             render_frequency: 0.0,
-    //         },
-    //     )
-    //     .unwrap()
-    // }
-
     pub fn should_render_separately(&self) -> bool {
-        return self.config.render_occasion == RenderOccasion::Frequency;
+        self.config.render_occasion == RenderOccasion::Frequency
     }
 
     pub fn run_separate_render(&self) {
@@ -86,27 +76,27 @@ impl GPU {
         }
     }
 
-    pub fn get_screen_resolution(&self) -> (usize, usize) {
-        return (
+    pub const fn get_screen_resolution(&self) -> (u32, u32) {
+        (
             self.config.horizontal_resolution,
             self.config.vertical_resolution,
-        );
+        )
     }
 
-    pub fn get_active_color(&self) -> u32 {
-        return self.config.pixel_color_when_active;
+    pub const fn get_active_color(&self) -> u32 {
+        self.config.pixel_color_when_active
     }
 
-    pub fn get_inactive_color(&self) -> u32 {
-        return self.config.pixel_color_when_inactive;
+    pub const fn get_inactive_color(&self) -> u32 {
+        self.config.pixel_color_when_inactive
     }
 
-    pub fn get_border_color(&self) -> u32 {
-        return self.config.screen_border_color;
+    pub const fn get_border_color(&self) -> u32 {
+        self.config.screen_border_color
     }
 
     pub fn get_framebuffer(&self) -> MutexGuard<'_, Vec<bool>> {
-        return self.framebuffer.lock().unwrap();
+        self.framebuffer.lock().unwrap()
     }
 
     pub fn is_render_queued(&self) -> bool {
@@ -131,57 +121,59 @@ impl GPU {
                 .wait_timeout(render_queued, CONDVAR_WAIT_TIMEOUT)
                 .unwrap();
         }
+
+        drop(render_queued);
     }
 
     pub fn clear_framebuffer(&self) {
         self.framebuffer.lock().unwrap().fill(false);
 
-        if self.config.render_occasion == RenderOccasion::Changes {
+        if self.config.render_occasion == RenderOccasion::OnChanges {
             self.queue_render();
         }
     }
 
-    pub fn draw_sprite(&self, sprite: Vec<u8>, x_pos: u8, y_pos: u8) -> bool {
-        if cfg!(debug_assertions) && sprite.len() > 15 {
-            panic!("Error: Should not be draw a sprite larger than 16 bytes.");
-        }
+    pub fn draw_sprite(&self, sprite: &[u8], x_pos: u8, y_pos: u8) -> bool {
+        assert!(
+            sprite.len() > 15,
+            "Should not be draw a sprite larger than 16 bytes."
+        );
 
-        let mut x_pos = x_pos as usize;
-        let mut y_pos = y_pos as usize;
+        let mut x_pos = u32::from(x_pos);
+        let mut y_pos = u32::from(y_pos);
 
         if self.config.wrap_sprite_positions {
             x_pos %= self.config.horizontal_resolution;
             y_pos %= self.config.vertical_resolution;
-        } else {
-            if x_pos >= self.config.horizontal_resolution
-                || y_pos >= self.config.vertical_resolution
-            {
-                return false;
-            }
+        } else if x_pos >= self.config.horizontal_resolution
+            || y_pos >= self.config.vertical_resolution
+        {
+            return false;
         }
 
         let mut collided = false;
         let mut framebuffer = self.framebuffer.lock().unwrap();
 
-        for i in 0..sprite.len() {
-            if self.draw_byte(&mut framebuffer, sprite[i], x_pos, y_pos + i) {
+        for (i, &pix) in sprite.iter().enumerate() {
+            let i = u32::try_from(i).unwrap();
+            if self.draw_byte(&mut framebuffer, pix, x_pos, i + y_pos) {
                 collided = true;
             }
         }
 
-        if self.config.render_occasion == RenderOccasion::Changes {
+        if self.config.render_occasion == RenderOccasion::OnChanges {
             self.queue_render();
         }
 
-        return collided;
+        collided
     }
 
     fn draw_byte(
         &self,
         framebuffer: &mut MutexGuard<'_, Vec<bool>>,
         mut byte: u8,
-        x_pos: usize,
-        y_pos: usize,
+        x_pos: u32,
+        y_pos: u32,
     ) -> bool {
         let mut collided = false;
 
@@ -193,36 +185,34 @@ impl GPU {
                 continue;
             }
 
-            if let Some(true) = self.draw_pixel(framebuffer, x_pos + i, y_pos) {
+            if self.draw_pixel(framebuffer, x_pos + i, y_pos) == Some(true) {
                 collided = true;
             }
         }
 
-        return collided;
+        collided
     }
 
     fn draw_pixel(
         &self,
         framebuffer: &mut MutexGuard<'_, Vec<bool>>,
-        mut x_pos: usize,
-        mut y_pos: usize,
+        mut x_pos: u32,
+        mut y_pos: u32,
     ) -> Option<bool> {
-        let width = self.config.horizontal_resolution as usize;
-        let height = self.config.vertical_resolution as usize;
+        let width = self.config.horizontal_resolution;
+        let height = self.config.vertical_resolution;
 
         if self.config.wrap_sprite_pixels {
             x_pos %= width;
             y_pos %= height;
-        } else {
-            if x_pos >= width || y_pos >= height {
-                return None;
-            }
+        } else if x_pos >= width || y_pos >= height {
+            return None;
         }
 
-        let index = (y_pos * width + x_pos) as usize;
+        let index = y_pos * width + x_pos;
 
-        let collision = framebuffer[index];
-        framebuffer[index] ^= true;
-        return Some(collision);
+        let collision = framebuffer[index as usize];
+        framebuffer[index as usize] ^= true;
+        Some(collision)
     }
 }

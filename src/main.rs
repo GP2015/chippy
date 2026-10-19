@@ -1,3 +1,7 @@
+#![no_std]
+#![warn(clippy::pedantic, clippy::nursery)]
+#![allow(clippy::unreadable_literal, clippy::struct_excessive_bools)]
+
 mod config;
 mod cpu;
 mod emulib;
@@ -8,19 +12,28 @@ mod ram;
 mod timer;
 mod window;
 
-use crate::cpu::CPU;
-use crate::gpu::GPU;
-use crate::input::InputManager;
-use crate::ram::RAM;
-use crate::timer::{DelayTimer, SoundTimer};
-use crate::window::WindowManager;
+extern crate alloc;
+extern crate std;
+
+use crate::{
+    cpu::Cpu,
+    gpu::Gpu,
+    input::InputManager,
+    ram::Ram,
+    timer::{DelayTimer, SoundTimer},
+    window::WindowManager,
+};
+use alloc::{string::String, sync::Arc, vec::Vec};
 use clap::Parser;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
+use core::sync::atomic::{AtomicBool, Ordering};
+use mimalloc::MiMalloc;
+use std::{eprintln, thread};
 use winit::event_loop::{ControlFlow, EventLoop};
 
-#[derive(Parser, Debug)]
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
+#[derive(Clone, Debug, Parser, Eq, Hash, PartialEq)]
 #[command(version, about, long_about = None)]
 struct Args {
     program_path: String,
@@ -28,21 +41,19 @@ struct Args {
 
 struct Components {
     active: Arc<AtomicBool>,
-    cpu: Arc<CPU>,
-    gpu: Arc<GPU>,
-    ram: Arc<RAM>,
+    cpu: Arc<Cpu>,
+    gpu: Arc<Gpu>,
+    ram: Arc<Ram>,
     delay_timer: Arc<DelayTimer>,
     sound_timer: Arc<SoundTimer>,
     input_manager: Arc<InputManager>,
 }
 
 fn main() {
-    println!("Starting emulator...");
-
     let args = Args::parse();
 
     let Some(comps) = create_components() else {
-        println!("Stopping emulator...");
+        eprintln!("Failed to instantiate components.");
         return;
     };
 
@@ -57,7 +68,7 @@ fn main() {
     let event_loop = match EventLoop::new() {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("Error: Failed to create event loop ({e}).");
+            eprintln!("Failed to create event loop ({e}).");
             return;
         }
     };
@@ -76,19 +87,18 @@ fn main() {
     handles.push(thread::spawn(move || comps.cpu.run()));
 
     if let Err(e) = event_loop.run_app(&mut window_manager) {
-        eprintln!("Error: Window manager event loop failed ({e}).");
+        eprintln!("Window manager event loop failed ({e}).");
         comps.active.store(false, Ordering::Release);
-    };
-
-    if cfg!(debug_assertions) && comps.active.load(Ordering::Relaxed) {
-        panic!("Event loop should not have exited while active is high.");
     }
+
+    assert!(
+        comps.active.load(Ordering::Relaxed),
+        "Event loop should not have exited while active is high."
+    );
 
     for handle in handles {
         handle.join().unwrap();
     }
-
-    println!("Stopping emulator...");
 }
 
 fn create_components() -> Option<Components> {
@@ -96,10 +106,10 @@ fn create_components() -> Option<Components> {
     let active = Arc::new(AtomicBool::new(true));
     let delay_timer = DelayTimer::try_new(active.clone(), config.delay_timer)?;
     let sound_timer = SoundTimer::try_new(active.clone(), config.sound_timer)?;
-    let input_manager = InputManager::try_new(active.clone(), config.input)?;
-    let ram = RAM::try_new(active.clone(), config.ram)?;
-    let gpu = GPU::try_new(active.clone(), config.gpu)?;
-    let cpu = CPU::try_new(
+    let input_manager = InputManager::new(active.clone(), config.input);
+    let ram = Ram::try_new(active.clone(), config.ram)?;
+    let gpu = Gpu::try_new(active.clone(), config.gpu)?;
+    let cpu = Cpu::try_new(
         active.clone(),
         config.cpu,
         gpu.clone(),
@@ -109,7 +119,7 @@ fn create_components() -> Option<Components> {
         input_manager.clone(),
     )?;
 
-    return Some(Components {
+    Some(Components {
         active,
         cpu,
         gpu,
@@ -117,5 +127,5 @@ fn create_components() -> Option<Components> {
         delay_timer,
         sound_timer,
         input_manager,
-    });
+    })
 }

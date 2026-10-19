@@ -41,7 +41,7 @@ set_flag_for_index_overflow = true
 move_index_with_reads = false
 
 # Whether to limit the number of draws to one per frame.
-# If true, then the CPU will wait until a render occurs before drawing the next sprite.
+# If true, then the Cpu will wait until a render occurs before drawing the next sprite.
 # This is overridden when using any preset other than "Custom".
 # This must be a boolean value (true or false).
 limit_to_one_draw_per_frame = false
@@ -108,9 +108,9 @@ wrap_sprite_pixels = true
 
 # When to render the framebuffer to the screen.
 # This must be one of the Strings below:
-# "changes": draws after all commands that change the framebuffer somehow; otherwise waits.
+# "on_changes": draws after all commands that change the framebuffer somehow; otherwise waits.
 # "frequency": draws at a constant frequency (specified in render_frequency)
-render_occasion = "changes"
+render_occasion = "on_changes"
 
 # The frequency at which to render the framebuffer to the screen.
 # Only applicable if not rendering at constant frequency (i.e. render_occasion = "frequency").
@@ -125,7 +125,22 @@ render_frequency = 60
 # The keybindings for each of the 16 inputs.
 # These are ordered by the original keypad's hexadecimal naming convention.
 key_bindings = [
-    "x", "1", "2", "3", "q", "w", "e", "a", "s", "d", "z", "c", "4", "r", "f", "v"
+    "x",
+    "1",
+    "2",
+    "3",
+    "q",
+    "w",
+    "e",
+    "a",
+    "s",
+    "d",
+    "z",
+    "c",
+    "4",
+    "r",
+    "f",
+    "v",
 ]
 
 
@@ -156,22 +171,86 @@ font_starting_address = 0x50
 # Each number has 5 bytes associated with it.
 # This must be an array of 80 different 8-bit unsigned integer values.
 font_data = [
-    0xf0, 0x90, 0x90, 0x90, 0xf0, # 0
-    0x20, 0x60, 0x20, 0x20, 0x70, # 1
-    0xf0, 0x10, 0xf0, 0x80, 0xf0, # 2
-    0xf0, 0x10, 0xf0, 0x10, 0xf0, # 3
-    0x90, 0x90, 0xf0, 0x10, 0x10, # 4
-    0xf0, 0x80, 0xf0, 0x10, 0xf0, # 5
-    0xf0, 0x80, 0xf0, 0x90, 0xf0, # 6
-    0xf0, 0x10, 0x20, 0x40, 0x40, # 7
-    0xf0, 0x90, 0xf0, 0x90, 0xf0, # 8
-    0xf0, 0x90, 0xf0, 0x10, 0xf0, # 9
-    0xf0, 0x90, 0xf0, 0x90, 0x90, # a
-    0xe0, 0x90, 0xe0, 0x90, 0xe0, # b
-    0xf0, 0x80, 0x80, 0x80, 0xf0, # c
-    0xe0, 0x90, 0x90, 0x90, 0xe0, # d
-    0xf0, 0x80, 0xf0, 0x80, 0xf0, # e
-    0xf0, 0x80, 0xf0, 0x80, 0x80  # f
+    0xf0,
+    0x90,
+    0x90,
+    0x90,
+    0xf0, # 0
+    0x20,
+    0x60,
+    0x20,
+    0x20,
+    0x70, # 1
+    0xf0,
+    0x10,
+    0xf0,
+    0x80,
+    0xf0, # 2
+    0xf0,
+    0x10,
+    0xf0,
+    0x10,
+    0xf0, # 3
+    0x90,
+    0x90,
+    0xf0,
+    0x10,
+    0x10, # 4
+    0xf0,
+    0x80,
+    0xf0,
+    0x10,
+    0xf0, # 5
+    0xf0,
+    0x80,
+    0xf0,
+    0x90,
+    0xf0, # 6
+    0xf0,
+    0x10,
+    0x20,
+    0x40,
+    0x40, # 7
+    0xf0,
+    0x90,
+    0xf0,
+    0x90,
+    0xf0, # 8
+    0xf0,
+    0x90,
+    0xf0,
+    0x10,
+    0xf0, # 9
+    0xf0,
+    0x90,
+    0xf0,
+    0x90,
+    0x90, # a
+    0xe0,
+    0x90,
+    0xe0,
+    0x90,
+    0xe0, # b
+    0xf0,
+    0x80,
+    0x80,
+    0x80,
+    0xf0, # c
+    0xe0,
+    0x90,
+    0x90,
+    0x90,
+    0xe0, # d
+    0xf0,
+    0x80,
+    0xf0,
+    0x80,
+    0xf0, # e
+    0xf0,
+    0x80,
+    0xf0,
+    0x80,
+    0x80, # f
 ]
 
 
