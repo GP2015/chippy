@@ -1,5 +1,6 @@
+use log::error;
 use std::{
-    eprintln, thread,
+    thread,
     time::{Duration, Instant},
 };
 
@@ -30,7 +31,7 @@ impl Limiter {
 
         self.target = if self.catch_up {
             self.target.checked_add(self.delay).unwrap_or_else(|| {
-                eprintln!("Failed to catch-up limiter.");
+                error!("Failed to catch-up limiter.");
                 Instant::now()
             })
         } else {

@@ -1,8 +1,9 @@
 use crate::{gpu::Gpu, input::InputManager};
 use alloc::vec;
+use log::error;
 use softbuffer::{Buffer, Context, Surface};
 use std::{
-    cmp, eprintln,
+    cmp,
     num::NonZeroU32,
     rc::Rc,
     sync::{
@@ -90,7 +91,7 @@ impl Position {
         self
     }
 
-    pub const fn get_screen_width(&self) -> u32 {
+    pub const fn screen_width(&self) -> u32 {
         self.screen_width
     }
 }
@@ -110,7 +111,7 @@ pub struct WindowManager {
 
 impl WindowManager {
     pub fn new(active: Arc<AtomicBool>, gpu: Arc<Gpu>, input_manager: Arc<InputManager>) -> Self {
-        let (base_width, base_height) = gpu.get_screen_resolution();
+        let (base_width, base_height) = gpu.screen_resolution();
 
         let base_size = Size::new(base_width, base_height);
 
@@ -138,7 +139,7 @@ impl WindowManager {
             return;
         };
 
-        let border_color = self.gpu.get_border_color();
+        let border_color = self.gpu.border_color();
 
         let (window_width, window_height) = self.window_size.get();
         let (base_width, base_height) = self.base_size.get();
@@ -147,12 +148,12 @@ impl WindowManager {
         let x_margin = (window_width - base_width * size_factor) / 2;
         let y_margin = (window_height - base_height * size_factor) / 2;
 
-        let gpu_buffer = self.gpu.get_framebuffer();
+        let gpu_buffer = self.gpu.framebuffer();
 
         let mut render_buffer = match surface.buffer_mut() {
             Ok(b) => b,
             Err(e) => {
-                eprintln!("Failed to retrieve the render buffer ({e}).");
+                error!("Failed to retrieve the render buffer ({e}).");
                 self.active.store(false, Ordering::Relaxed);
                 return;
             }
@@ -199,9 +200,9 @@ impl WindowManager {
             let size = Size::new(self.size_factor, self.size_factor);
 
             let color = if gpu_buffer[pixel] {
-                self.gpu.get_active_color()
+                self.gpu.active_color()
             } else {
-                self.gpu.get_inactive_color()
+                self.gpu.inactive_color()
             };
 
             Self::render_square(pos, size, color, &mut render_buffer);
@@ -210,7 +211,7 @@ impl WindowManager {
         drop(gpu_buffer);
 
         if let Err(e) = render_buffer.present() {
-            eprintln!("Failed to present the render buffer ({e}).");
+            error!("Failed to present the render buffer ({e}).");
             self.active.store(false, Ordering::Relaxed);
         }
     }
@@ -224,7 +225,7 @@ impl WindowManager {
         let pixel_row = vec![color; size.width as usize];
 
         for row in 0..size.height {
-            let start_index = pos.index + row * pos.get_screen_width();
+            let start_index = pos.index + row * pos.screen_width();
             buffer[start_index as usize..(start_index + size.width) as usize]
                 .copy_from_slice(&pixel_row);
         }
@@ -243,19 +244,19 @@ impl WindowManager {
         };
 
         let Some(new_size_width_nz) = NonZeroU32::new(new_size.width) else {
-            eprintln!("Failed to convert window width into NonZeroU32.");
+            error!("Failed to convert window width into NonZeroU32.");
             self.active.store(false, Ordering::Relaxed);
             return;
         };
 
         let Some(new_size_height_nz) = NonZeroU32::new(new_size.height) else {
-            eprintln!("Failed to convert window height into NonZeroU32.");
+            error!("Failed to convert window height into NonZeroU32.");
             self.active.store(false, Ordering::Relaxed);
             return;
         };
 
         if let Err(e) = surface.resize(new_size_width_nz, new_size_height_nz) {
-            eprintln!("Failed to resize the softbuffer surface ({e}).");
+            error!("Failed to resize the softbuffer surface ({e}).");
             self.active.store(false, Ordering::Relaxed);
         }
     }

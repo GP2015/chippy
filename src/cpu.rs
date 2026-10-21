@@ -1,5 +1,3 @@
-use alloc::vec::Vec;
-
 use crate::{
     config::CPUConfig,
     emulib::Limiter,
@@ -9,8 +7,9 @@ use crate::{
     ram::{self, Ram},
     timer::{DelayTimer, SoundTimer},
 };
+use alloc::vec::Vec;
+use log::error;
 use std::{
-    eprintln,
     ops::{Bound, RangeBounds},
     slice::SliceIndex,
     sync::{
@@ -43,7 +42,7 @@ impl Cpu {
         input_manager: Arc<InputManager>,
     ) -> Option<Arc<Self>> {
         if config.instructions_per_second <= 0.0 {
-            eprintln!("The Cpu's instruction-per-second rate must be greater than 0.");
+            error!("The Cpu's instruction-per-second rate must be greater than 0.");
             active.store(false, Ordering::Relaxed);
             return None;
         }
@@ -156,7 +155,7 @@ impl Cpu {
         let mut pc = self.pc.lock().unwrap();
 
         if *pc >= 0xFFE && !self.config.allow_program_counter_overflow {
-            eprintln!("Program counter overflowed.");
+            error!("Program counter overflowed.");
             self.active.store(false, Ordering::Relaxed);
             return None;
         }
@@ -170,14 +169,14 @@ impl Cpu {
     }
 
     fn decode_instruction(instruction: Opcode) -> Option<InstructionFunction> {
-        instructions::get_instruction_function(instruction)
+        instructions::instruction_function(instruction)
     }
 
     fn execute_instruction(&self, instruction: Opcode, function: InstructionFunction) -> bool {
         function(self, instruction)
     }
 
-    pub fn get_pc_ref(&self) -> MutexGuard<'_, u16> {
+    pub fn pc_ref(&self) -> MutexGuard<'_, u16> {
         self.pc.lock().unwrap()
     }
 
@@ -194,7 +193,7 @@ impl Cpu {
         let mut pc = self.pc.lock().unwrap();
 
         if *pc >= 0xFFE && !self.config.allow_program_counter_overflow {
-            eprintln!("Program counter overflowed.");
+            error!("Program counter overflowed.");
             self.active.store(false, Ordering::Relaxed);
             return false;
         }
@@ -203,11 +202,11 @@ impl Cpu {
         true
     }
 
-    pub fn get_index_reg_ref(&self) -> MutexGuard<'_, u16> {
+    pub fn index_reg_ref(&self) -> MutexGuard<'_, u16> {
         self.index.lock().unwrap()
     }
 
-    pub fn get_index_reg(&self) -> u16 {
+    pub fn index_reg(&self) -> u16 {
         *self.index.lock().unwrap()
     }
 
@@ -233,7 +232,7 @@ impl Cpu {
         let (val, wrapped) = index_ref.overflowing_add(value);
 
         if wrapped && !self.config.allow_index_register_overflow {
-            eprintln!("Index register overflowed.");
+            error!("Index register overflowed.");
             self.active.store(false, Ordering::Relaxed);
             return None;
         }
@@ -243,11 +242,11 @@ impl Cpu {
         Some(*index_ref > 0xFFF)
     }
 
-    pub fn get_v_regs_ref(&self) -> MutexGuard<'_, [u8; 16]> {
+    pub fn v_regs_ref(&self) -> MutexGuard<'_, [u8; 16]> {
         self.v.lock().unwrap()
     }
 
-    pub fn get_v_reg(&self, reg: u8) -> u8 {
+    pub fn v_reg(&self, reg: u8) -> u8 {
         assert!(
             reg > 0xF,
             "Should not be possible to access non-existent V registers."
@@ -256,7 +255,7 @@ impl Cpu {
         return self.v.lock().unwrap()[reg as usize];
     }
 
-    pub fn get_v_reg_xy(&self, x: u8, y: u8) -> (u8, u8) {
+    pub fn v_reg_xy(&self, x: u8, y: u8) -> (u8, u8) {
         assert!(
             x > 0xF || y > 0xF,
             "Should not be possible to access non-existent V registers."
@@ -266,7 +265,7 @@ impl Cpu {
         (v[x as usize], v[y as usize])
     }
 
-    pub fn get_v_reg_range<R>(&self, range: R) -> Vec<u8>
+    pub fn v_reg_range<R>(&self, range: R) -> Vec<u8>
     where
         R: SliceIndex<[u8], Output = [u8]> + RangeBounds<usize>,
     {
@@ -397,20 +396,20 @@ mod tests {
     fn test_set_program_counter_manually() {
         let (cpu, active) = create_objects(ConfigType::Conservative);
         cpu.set_pc(0x567);
-        assert_eq!(0x567, *cpu.get_pc_ref());
+        assert_eq!(0x567, *cpu.pc_ref());
         assert!(active.load(Ordering::Relaxed));
     }
 
     #[test]
-    fn test_get_program_counter_reference() {
+    fn test_program_counter_reference() {
         let (cpu, active) = create_objects(ConfigType::Conservative);
 
         {
-            let mut pc = cpu.get_pc_ref();
+            let mut pc = cpu.pc_ref();
             *pc = 0x567;
         }
 
-        let mut pc = cpu.get_pc_ref();
+        let mut pc = cpu.pc_ref();
         *pc += 2;
 
         assert_eq!(0x569, *pc);
@@ -421,7 +420,7 @@ mod tests {
     fn test_set_index_register() {
         let (cpu, active) = create_objects(ConfigType::Conservative);
         cpu.set_index_reg(0x567);
-        assert_eq!(0x567, cpu.get_index_reg());
+        assert_eq!(0x567, cpu.index_reg());
         assert!(active.load(Ordering::Relaxed));
     }
 
@@ -429,30 +428,30 @@ mod tests {
     fn test_set_v_register() {
         let (cpu, active) = create_objects(ConfigType::Conservative);
         cpu.set_v_reg(0x5, 0x67);
-        assert_eq!(0x67, cpu.get_v_reg(0x5));
+        assert_eq!(0x67, cpu.v_reg(0x5));
         assert!(active.load(Ordering::Relaxed));
     }
 
     #[test]
-    fn test_get_v_register_reference() {
+    fn test_v_register_reference() {
         let (cpu, active) = create_objects(ConfigType::Conservative);
 
         {
-            let mut v = cpu.get_v_regs_ref();
+            let mut v = cpu.v_regs_ref();
             v[0x5] = 0x67;
         }
 
-        let v = cpu.get_v_regs_ref();
+        let v = cpu.v_regs_ref();
         assert_eq!(0x67, v[0x5]);
         assert!(active.load(Ordering::Relaxed));
     }
 
     #[test]
-    fn test_get_v_register_for_x_and_y() {
+    fn test_v_register_for_x_and_y() {
         let (cpu, active) = create_objects(ConfigType::Conservative);
         cpu.set_v_reg(2, 0x34);
         cpu.set_v_reg(5, 0x67);
-        assert_eq!((0x34, 0x67), cpu.get_v_reg_xy(2, 5));
+        assert_eq!((0x34, 0x67), cpu.v_reg_xy(2, 5));
         assert!(active.load(Ordering::Relaxed));
     }
 
@@ -464,14 +463,14 @@ mod tests {
         cpu.set_v_reg_range(2, &ideal_bytes);
 
         for i in 0..5 {
-            assert_eq!(ideal_bytes[i as usize], cpu.get_v_reg(i + 2));
+            assert_eq!(ideal_bytes[i as usize], cpu.v_reg(i + 2));
         }
 
         assert!(active.load(Ordering::Relaxed));
     }
 
     #[test]
-    fn test_get_v_register_range() {
+    fn test_v_register_range() {
         let (cpu, active) = create_objects(ConfigType::Conservative);
 
         let ideal_bytes = vec![0x48, 0x65, 0x6c, 0x6c, 0x6f];
@@ -480,7 +479,7 @@ mod tests {
             cpu.set_v_reg(i + 2, ideal_bytes[i as usize]);
         }
 
-        assert_eq!(ideal_bytes, cpu.get_v_reg_range(2..7));
+        assert_eq!(ideal_bytes, cpu.v_reg_range(2..7));
         assert!(active.load(Ordering::Relaxed));
     }
 }

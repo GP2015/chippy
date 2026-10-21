@@ -2,16 +2,14 @@ use crate::{
     config::{DelayTimerConfig, SoundTimerConfig, ToneWaveform},
     emulib::Limiter,
 };
+use log::error;
 use rodio::{
     DeviceSinkBuilder, Player,
     source::{SawtoothWave, SineWave, SquareWave, TriangleWave},
 };
-use std::{
-    eprintln,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, AtomicU8, Ordering},
-    },
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, AtomicU8, Ordering},
 };
 
 #[derive(Debug)]
@@ -24,7 +22,7 @@ pub struct DelayTimer {
 impl DelayTimer {
     pub fn try_new(active: Arc<AtomicBool>, config: DelayTimerConfig) -> Option<Arc<Self>> {
         if config.delay_timer_decrement_rate <= 0.0 {
-            eprintln!("The delay timer's decrement rate must be greater than zero.");
+            error!("The delay timer's decrement rate must be greater than zero.");
             active.store(false, Ordering::Relaxed);
             return None;
         }
@@ -61,7 +59,7 @@ impl DelayTimer {
         }
     }
 
-    pub fn get_value(&self) -> u8 {
+    pub fn value(&self) -> u8 {
         self.value.load(Ordering::Relaxed)
     }
 
@@ -80,7 +78,7 @@ pub struct SoundTimer {
 impl SoundTimer {
     pub fn try_new(active: Arc<AtomicBool>, config: SoundTimerConfig) -> Option<Arc<Self>> {
         if config.sound_timer_decrement_rate <= 0.0 {
-            eprintln!("The sound timer's decrement rate must be greater than zero.");
+            error!("The sound timer's decrement rate must be greater than zero.");
             active.store(false, Ordering::Relaxed);
             return None;
         }
@@ -88,7 +86,7 @@ impl SoundTimer {
         let device_sink = match DeviceSinkBuilder::open_default_sink() {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("Failed to open audio stream ({e}).");
+                error!("Failed to open audio stream ({e}).");
                 return None;
             }
         };
@@ -171,7 +169,7 @@ mod tests {
 
         thread::sleep(Duration::from_millis(150));
 
-        assert_eq!(0, timer.get_value());
+        assert_eq!(0, timer.value());
         assert!(active.load(Ordering::Relaxed));
 
         active.store(false, Ordering::Relaxed);

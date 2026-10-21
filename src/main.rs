@@ -26,8 +26,9 @@ use crate::{
 use alloc::{string::String, sync::Arc, vec::Vec};
 use clap::Parser;
 use core::sync::atomic::{AtomicBool, Ordering};
+use log::error;
 use mimalloc::MiMalloc;
-use std::{eprintln, thread};
+use std::thread;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 #[global_allocator]
@@ -50,10 +51,12 @@ struct Components {
 }
 
 fn main() {
+    env_logger::init();
+
     let args = Args::parse();
 
     let Some(comps) = create_components() else {
-        eprintln!("Failed to instantiate components.");
+        error!("Failed to instantiate components.");
         return;
     };
 
@@ -68,7 +71,7 @@ fn main() {
     let event_loop = match EventLoop::new() {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("Failed to create event loop ({e}).");
+            error!("Failed to create event loop ({e}).");
             return;
         }
     };
@@ -87,7 +90,7 @@ fn main() {
     handles.push(thread::spawn(move || comps.cpu.run()));
 
     if let Err(e) = event_loop.run_app(&mut window_manager) {
-        eprintln!("Window manager event loop failed ({e}).");
+        error!("Window manager event loop failed ({e}).");
         comps.active.store(false, Ordering::Release);
     }
 

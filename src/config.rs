@@ -1,22 +1,15 @@
 use alloc::{string::String, vec::Vec};
+use log::error;
 use serde::{Deserialize, Deserializer, de::Error as SerdeError};
 use serde_with::serde_as;
-use std::{eprintln, fs};
+use std::fs;
 use winit::keyboard::{Key, SmolStr};
 
 const CONFIG_FILE_PATH: &str = "config.toml";
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum Preset {
-    CHIP8,
-    Custom,
-}
-
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Config {
-    pub preset: Preset,
     pub cpu: CPUConfig,
     pub gpu: GPUConfig,
     pub input: InputConfig,
@@ -112,48 +105,15 @@ pub struct SoundTimerConfig {
 
 pub fn generate_configs() -> Option<Config> {
     let Ok(raw_config) = fs::read_to_string(CONFIG_FILE_PATH) else {
-        eprintln!("Could not read config.toml at {CONFIG_FILE_PATH}");
+        error!("Could not read config.toml at {CONFIG_FILE_PATH}");
         return None;
     };
 
-    let mut config: Config = toml::from_str(&raw_config)
+    let config = toml::from_str(&raw_config)
         .map_err(|err| {
-            eprintln!("Could not parse config.toml ({err}).");
+            error!("Could not parse config.toml ({err}).");
         })
         .ok()?;
 
-    match config.preset {
-        Preset::CHIP8 => enable_chip8_preset(&mut config),
-        Preset::Custom => (),
-    }
-
     Some(config)
-}
-
-const fn enable_chip8_preset(config: &mut Config) {
-    config.cpu.reset_flag_for_bitwise_operations = true;
-    config.cpu.use_new_shift_instruction = false;
-    config.cpu.use_new_jump_instruction = false;
-    config.cpu.set_flag_for_index_overflow = false;
-    config.cpu.move_index_with_reads = true;
-    config.cpu.limit_to_one_draw_per_frame = true;
-    config.gpu.horizontal_resolution = 64;
-    config.gpu.vertical_resolution = 32;
-    config.gpu.wrap_sprite_positions = true;
-    config.gpu.wrap_sprite_pixels = false;
-    config.gpu.render_occasion = RenderOccasion::Frequency;
-    config.gpu.render_frequency = 60.0;
-    config.ram.stack_size = 16;
-    config.delay_timer.delay_timer_decrement_rate = 60.0;
-    config.sound_timer.sound_timer_decrement_rate = 60.0;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_generate_configs() {
-        let _ = generate_configs().unwrap();
-    }
 }

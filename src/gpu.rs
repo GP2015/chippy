@@ -2,10 +2,9 @@ use crate::{
     config::{GPUConfig, RenderOccasion},
     emulib::Limiter,
 };
-use alloc::vec;
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
+use log::error;
 use std::{
-    eprintln,
     sync::{
         Arc, Condvar, Mutex, MutexGuard,
         atomic::{AtomicBool, Ordering},
@@ -27,7 +26,7 @@ pub struct Gpu {
 impl Gpu {
     pub fn try_new(active: Arc<AtomicBool>, config: GPUConfig) -> Option<Arc<Self>> {
         if config.render_occasion == RenderOccasion::Frequency && config.render_frequency <= 0.0 {
-            eprintln!("The graphic render frequency must be greater than 0.");
+            error!("The graphic render frequency must be greater than 0.");
             active.store(false, Ordering::Relaxed);
             return None;
         }
@@ -76,26 +75,26 @@ impl Gpu {
         }
     }
 
-    pub const fn get_screen_resolution(&self) -> (u32, u32) {
+    pub const fn screen_resolution(&self) -> (u32, u32) {
         (
             self.config.horizontal_resolution,
             self.config.vertical_resolution,
         )
     }
 
-    pub const fn get_active_color(&self) -> u32 {
+    pub const fn active_color(&self) -> u32 {
         self.config.pixel_color_when_active
     }
 
-    pub const fn get_inactive_color(&self) -> u32 {
+    pub const fn inactive_color(&self) -> u32 {
         self.config.pixel_color_when_inactive
     }
 
-    pub const fn get_border_color(&self) -> u32 {
+    pub const fn border_color(&self) -> u32 {
         self.config.screen_border_color
     }
 
-    pub fn get_framebuffer(&self) -> MutexGuard<'_, Vec<bool>> {
+    pub fn framebuffer(&self) -> MutexGuard<'_, Vec<bool>> {
         self.framebuffer.lock().unwrap()
     }
 

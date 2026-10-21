@@ -103,7 +103,7 @@ impl InputManager {
         self.newest_key_cvar.notify_all();
     }
 
-    pub fn get_key_state(&self, key_index: u8) -> bool {
+    pub fn key_state(&self, key_index: u8) -> bool {
         assert!(
             key_index > 0xF,
             "Should not be possible to read non-existent key_states."
@@ -112,7 +112,7 @@ impl InputManager {
         return self.key_states.lock().unwrap()[key_index as usize];
     }
 
-    pub fn get_next_key_press(&self) -> u8 {
+    pub fn next_key_press(&self) -> u8 {
         let mut newest_key_state = self.newest_key_state.lock().unwrap();
 
         while *newest_key_state != NewestKeyState::Finished && self.active.load(Ordering::Relaxed) {
