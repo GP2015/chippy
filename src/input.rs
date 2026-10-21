@@ -1,18 +1,13 @@
 use crate::config::InputConfig;
-use std::{
-    sync::{
-        Arc, Condvar, Mutex,
-        atomic::{AtomicBool, AtomicU8, Ordering},
-    },
+use alloc::sync::Arc;
+use core::{
+    sync::atomic::{AtomicBool, AtomicU8, Ordering},
     time::Duration,
 };
+use std::sync::{Condvar, Mutex};
+#[cfg(test)]
+use winit::keyboard::{Key, SmolStr};
 use winit_input_helper::WinitInputHelper;
-
-#[cfg(test)]
-use winit::keyboard::Key;
-
-#[cfg(test)]
-use winit::keyboard::SmolStr;
 
 const NUMBER_OF_INPUTS: usize = 16;
 const CONDVAR_WAIT_TIMEOUT: Duration = Duration::from_millis(100);

@@ -2,15 +2,13 @@ use crate::{
     config::{GPUConfig, RenderOccasion},
     emulib::Limiter,
 };
-use alloc::{vec, vec::Vec};
-use log::error;
-use std::{
-    sync::{
-        Arc, Condvar, Mutex, MutexGuard,
-        atomic::{AtomicBool, Ordering},
-    },
+use alloc::{sync::Arc, vec, vec::Vec};
+use core::{
+    sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
+use log::error;
+use std::sync::{Condvar, Mutex, MutexGuard};
 
 const CONDVAR_WAIT_TIMEOUT: Duration = Duration::from_millis(100);
 

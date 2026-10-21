@@ -1,14 +1,8 @@
 use crate::config::RAMConfig;
-use alloc::vec::Vec;
-use alloc::{string::String, vec};
+use alloc::{string::String, sync::Arc, vec, vec::Vec};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use log::error;
-use std::{
-    fs,
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-    },
-};
+use std::{fs, sync::Mutex};
 
 pub const PROGRAM_START_ADDRESS: u16 = 0x200;
 pub const HEAP_SIZE: usize = 0x1000;

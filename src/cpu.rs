@@ -7,16 +7,14 @@ use crate::{
     ram::{self, Ram},
     timer::{DelayTimer, SoundTimer},
 };
-use alloc::vec::Vec;
-use log::error;
-use std::{
+use alloc::{sync::Arc, vec::Vec};
+use core::{
     ops::{Bound, RangeBounds},
     slice::SliceIndex,
-    sync::{
-        Arc, Mutex, MutexGuard,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::atomic::{AtomicBool, Ordering},
 };
+use log::error;
+use std::sync::{Mutex, MutexGuard};
 
 pub struct Cpu {
     pub active: Arc<AtomicBool>,

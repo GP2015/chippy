@@ -1,6 +1,6 @@
 use alloc::{string::String, vec::Vec};
 use log::error;
-use serde::{Deserialize, Deserializer, de::Error as SerdeError};
+use serde::{Deserialize, Deserializer, de::Error};
 use serde_with::serde_as;
 use std::fs;
 use winit::keyboard::{Key, SmolStr};
@@ -62,7 +62,7 @@ where
         .map(|key| Key::Character(SmolStr::new(key)))
         .collect::<Vec<_>>()
         .try_into()
-        .map_err(|_| SerdeError::custom("expected exactly 16 keys"))
+        .map_err(|_| D::Error::custom("expected exactly 16 keys"))
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq)]

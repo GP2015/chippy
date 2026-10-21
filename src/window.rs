@@ -1,16 +1,12 @@
 use crate::{gpu::Gpu, input::InputManager};
-use alloc::vec;
-use log::error;
-use softbuffer::{Buffer, Context, Surface};
-use std::{
+use alloc::{rc::Rc, sync::Arc, vec};
+use core::{
     cmp,
     num::NonZeroU32,
-    rc::Rc,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::atomic::{AtomicBool, Ordering},
 };
+use log::error;
+use softbuffer::{Buffer, Context, Surface};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,

@@ -2,14 +2,12 @@ use crate::{
     config::{DelayTimerConfig, SoundTimerConfig, ToneWaveform},
     emulib::Limiter,
 };
+use alloc::sync::Arc;
+use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use log::error;
 use rodio::{
     DeviceSinkBuilder, Player,
     source::{SawtoothWave, SineWave, SquareWave, TriangleWave},
-};
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, AtomicU8, Ordering},
 };
 
 #[derive(Debug)]

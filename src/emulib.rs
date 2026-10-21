@@ -1,8 +1,6 @@
+use core::time::Duration;
 use log::error;
-use std::{
-    thread,
-    time::{Duration, Instant},
-};
+use std::{thread, time::Instant};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Limiter {
