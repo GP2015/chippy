@@ -1,6 +1,7 @@
+use alloc::{string::String, vec::Vec};
 use serde::Deserialize;
 use serde_with::serde_as;
-use std::fs;
+use std::{eprintln, fs};
 use winit::keyboard::{Key, SmolStr};
 
 const CONFIG_FILE_PATH: &str = "config.toml";
@@ -24,6 +25,7 @@ pub struct Config {
     pub sound_timer: SoundTimerConfig,
 }
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Deserialize, Debug)]
 pub struct CPUConfig {
     pub instructions_per_second: f64,
@@ -51,8 +53,8 @@ pub struct GPUConfig {
     pub pixel_color_when_active: u32,
     pub pixel_color_when_inactive: u32,
     pub screen_border_color: u32,
-    pub horizontal_resolution: usize,
-    pub vertical_resolution: usize,
+    pub horizontal_resolution: u32,
+    pub vertical_resolution: u32,
     pub wrap_sprite_positions: bool,
     pub wrap_sprite_pixels: bool,
     pub render_occasion: RenderOccasion,
@@ -129,7 +131,7 @@ pub fn generate_configs() -> Option<Config> {
     Some(config)
 }
 
-fn enable_chip8_preset(config: &mut Config) {
+const fn enable_chip8_preset(config: &mut Config) {
     config.cpu.reset_flag_for_bitwise_operations = true;
     config.cpu.use_new_shift_instruction = false;
     config.cpu.use_new_jump_instruction = false;

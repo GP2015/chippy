@@ -1,14 +1,22 @@
-use crate::config::CPUConfig;
-use crate::emulib::Limiter;
-use crate::gpu::Gpu;
-use crate::input::InputManager;
-use crate::instructions::{self, InstructionFunction, Opcode};
-use crate::ram::{PROGRAM_START_ADDRESS, Ram};
-use crate::timer::{DelayTimer, SoundTimer};
-use std::ops::{Bound, RangeBounds};
-use std::slice::SliceIndex;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+mod instructions;
+
+use crate::{
+    common::Limiter,
+    config::CPUConfig,
+    cpu::instructions::{InstructionFunction, Opcode},
+    gpu::Gpu,
+    input::InputManager,
+    ram::{PROGRAM_START_ADDRESS, Ram},
+    timer::{DelayTimer, SoundTimer},
+};
+use alloc::{sync::Arc, vec::Vec};
+use core::{
+    ops::{Bound, RangeBounds},
+    slice::SliceIndex,
+    sync::atomic::{AtomicBool, Ordering},
+};
+use parking_lot::{Mutex, MutexGuard};
+use std::eprintln;
 
 pub struct Cpu {
     pub active: Arc<AtomicBool>,
@@ -144,7 +152,7 @@ impl Cpu {
     }
 
     fn fetch_instruction(&self) -> Option<Opcode> {
-        let mut pc = self.pc.lock().unwrap();
+        let mut pc = self.pc.lock();
 
         if *pc >= 0xFFE && !self.config.allow_program_counter_overflow {
             eprintln!("Program counter overflowed.");
@@ -156,6 +164,7 @@ impl Cpu {
 
         *pc = (*pc + 2) % 0x1000;
 
+        drop(pc);
         Some(Opcode::from_u8s(instruction_bytes[0], instruction_bytes[1]))
     }
 
@@ -168,12 +177,8 @@ impl Cpu {
     }
 
     pub fn get_pc_ref(&self) -> MutexGuard<'_, u16> {
-        self.pc.lock().unwrap()
+        self.pc.lock()
     }
-
-    // pub fn get_pc(&self) -> u16 {
-    //     return *self.pc.lock().unwrap();
-    // }
 
     pub fn set_pc(&self, value: u16) {
         debug_assert!(
@@ -181,11 +186,11 @@ impl Cpu {
             "Should not be possible to manually set program counter outside address space."
         );
 
-        *self.pc.lock().unwrap() = value;
+        *self.pc.lock() = value;
     }
 
     pub fn increment_pc(&self) -> bool {
-        let mut pc = self.pc.lock().unwrap();
+        let mut pc = self.pc.lock();
 
         if *pc >= 0xFFE && !self.config.allow_program_counter_overflow {
             eprintln!("Program counter overflowed.");
@@ -198,11 +203,11 @@ impl Cpu {
     }
 
     pub fn get_index_reg_ref(&self) -> MutexGuard<'_, u16> {
-        self.index.lock().unwrap()
+        self.index.lock()
     }
 
     pub fn get_index_reg(&self) -> u16 {
-        return *self.index.lock().unwrap();
+        return *self.index.lock();
     }
 
     pub fn set_index_reg(&self, value: u16) {
@@ -211,11 +216,11 @@ impl Cpu {
             "Should not be possible to manually set index register outside address space."
         );
 
-        *self.index.lock().unwrap() = value;
+        *self.index.lock() = value;
     }
 
     pub fn increment_index_reg_by(&self, value: u16) -> Option<bool> {
-        let index = self.index.lock().unwrap();
+        let index = self.index.lock();
         self.increment_index_reg_ref_by(index, value)
     }
 
@@ -238,7 +243,7 @@ impl Cpu {
     }
 
     pub fn get_v_regs_ref(&self) -> MutexGuard<'_, [u8; 16]> {
-        self.v.lock().unwrap()
+        self.v.lock()
     }
 
     pub fn get_v_reg(&self, reg: u8) -> u8 {
@@ -247,7 +252,7 @@ impl Cpu {
             "Should not be possible to access non-existent V registers."
         );
 
-        self.v.lock().unwrap()[reg as usize]
+        self.v.lock()[reg as usize]
     }
 
     pub fn get_v_reg_xy(&self, x: u8, y: u8) -> (u8, u8) {
@@ -256,7 +261,7 @@ impl Cpu {
             "Should not be possible to access non-existent V registers."
         );
 
-        let v = self.v.lock().unwrap();
+        let v = self.v.lock();
         (v[x as usize], v[y as usize])
     }
 
@@ -264,7 +269,7 @@ impl Cpu {
     where
         R: SliceIndex<[u8], Output = [u8]> + RangeBounds<usize>,
     {
-        let v = self.v.lock().unwrap();
+        let v = self.v.lock();
 
         if cfg!(debug_assertions) {
             let start = match range.start_bound() {
@@ -294,7 +299,7 @@ impl Cpu {
             "Should not be possible to access non-existent V registers."
         );
 
-        self.v.lock().unwrap()[reg as usize] = val;
+        self.v.lock()[reg as usize] = val;
     }
 
     pub fn set_v_reg_range(&self, reg: u8, vals: &[u8]) {
@@ -305,13 +310,14 @@ impl Cpu {
             "Should not be possible to access non-existent V registers."
         );
 
-        self.v.lock().unwrap()[reg..reg + vals.len()].copy_from_slice(vals);
+        self.v.lock()[reg..reg + vals.len()].copy_from_slice(vals);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[derive(Clone, Copy)]
     enum ConfigType {
@@ -353,13 +359,13 @@ mod tests {
     fn test_increment_program_counter() {
         let (cpu, active) = create_objects(ConfigType::Conservative);
 
-        let old_val = *cpu.pc.lock().unwrap();
+        let old_val = *cpu.pc.lock();
 
         for _ in 0..5 {
             assert!(cpu.increment_pc());
         }
 
-        assert_eq!(old_val + 10, *cpu.pc.lock().unwrap());
+        assert_eq!(old_val + 10, *cpu.pc.lock());
         assert!(active.load(Ordering::Relaxed));
     }
 
@@ -371,7 +377,7 @@ mod tests {
             assert!(cpu.increment_pc());
         }
 
-        assert_eq!(0x000, *cpu.pc.lock().unwrap());
+        assert_eq!(0x000, *cpu.pc.lock());
         assert!(active.load(Ordering::Relaxed));
     }
 

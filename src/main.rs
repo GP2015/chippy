@@ -1,28 +1,29 @@
-#![warn(clippy::pedantic)]
-#![allow(clippy::cast_possible_truncation)]
-#![allow(clippy::struct_excessive_bools)]
-#![allow(clippy::unreadable_literal)]
+#![no_std]
+#![warn(clippy::pedantic, clippy::nursery)]
+extern crate alloc;
+extern crate std;
 
+mod common;
 mod config;
 mod cpu;
-mod emulib;
 mod gpu;
 mod input;
-mod instructions;
 mod ram;
 mod timer;
 mod window;
 
-use crate::cpu::Cpu;
-use crate::gpu::Gpu;
-use crate::input::InputManager;
-use crate::ram::Ram;
-use crate::timer::{DelayTimer, SoundTimer};
-use crate::window::WindowManager;
+use crate::{
+    cpu::Cpu,
+    gpu::Gpu,
+    input::InputManager,
+    ram::Ram,
+    timer::{DelayTimer, SoundTimer},
+    window::WindowManager,
+};
+use alloc::{string::String, sync::Arc, vec::Vec};
 use clap::Parser;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
+use core::sync::atomic::{AtomicBool, Ordering};
+use std::{eprintln, println, thread};
 use winit::event_loop::{ControlFlow, EventLoop};
 
 #[derive(Parser, Debug)]

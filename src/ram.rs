@@ -1,7 +1,8 @@
 use crate::config::RAMConfig;
-use std::fs;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use alloc::{string::String, sync::Arc, vec, vec::Vec};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use parking_lot::Mutex;
+use std::{eprintln, fs};
 
 pub const PROGRAM_START_ADDRESS: u16 = 0x200;
 pub const HEAP_SIZE: usize = 0x1000;
@@ -37,7 +38,7 @@ impl Ram {
         };
 
         let font_start_addr = this.config.font_starting_address as usize;
-        this.heap.lock().unwrap()[font_start_addr..font_start_addr + 80]
+        this.heap.lock()[font_start_addr..font_start_addr + 80]
             .copy_from_slice(&this.config.font_data);
 
         Some(Arc::new(this))
@@ -88,8 +89,7 @@ impl Ram {
             return false;
         }
 
-        self.heap.lock().unwrap()[start_index..start_index + program.len()]
-            .copy_from_slice(&program);
+        self.heap.lock()[start_index..start_index + program.len()].copy_from_slice(&program);
 
         true
     }
@@ -117,7 +117,7 @@ impl Ram {
             addr %= 0x1000;
         }
 
-        let mut heap = self.heap.lock().unwrap();
+        let mut heap = self.heap.lock();
         heap[addr] = val;
         true
     }
@@ -146,14 +146,15 @@ impl Ram {
             let count_pre_split = HEAP_SIZE - addr;
             let count_post_split = count - count_pre_split;
 
-            let mut heap = self.heap.lock().unwrap();
+            let mut heap = self.heap.lock();
             heap[addr..].copy_from_slice(&vals[..count_pre_split]);
             heap[..count_post_split].copy_from_slice(&vals[count_pre_split..]);
+            drop(heap);
 
             return true;
         }
 
-        let mut heap = self.heap.lock().unwrap();
+        let mut heap = self.heap.lock();
         heap[addr..addr + count].copy_from_slice(vals);
 
         true
@@ -173,7 +174,7 @@ impl Ram {
             addr %= 0x1000;
         }
 
-        let heap = self.heap.lock().unwrap();
+        let heap = self.heap.lock();
         Some(heap[addr])
     }
 
@@ -202,19 +203,20 @@ impl Ram {
             let count_post_split = count - count_pre_split;
 
             let mut bytes: Vec<u8> = Vec::with_capacity(count);
-            let heap = self.heap.lock().unwrap();
+            let heap = self.heap.lock();
             bytes.extend_from_slice(&heap[addr..]);
             bytes.extend_from_slice(&heap[..count_post_split]);
+            drop(heap);
 
             return Some(bytes);
         }
 
-        let heap = self.heap.lock().unwrap();
+        let heap = self.heap.lock();
         Some(heap[addr..addr + count].to_vec())
     }
 
     pub fn push_to_stack(&self, val: u16) -> bool {
-        let mut stack = self.stack.lock().unwrap();
+        let mut stack = self.stack.lock();
 
         let stack_ptr = self.stack_ptr.load(Ordering::Relaxed);
 
@@ -232,13 +234,14 @@ impl Ram {
         }
 
         stack[stack_ptr] = val;
+        drop(stack);
         self.stack_ptr.store(stack_ptr + 1, Ordering::Relaxed);
 
         true
     }
 
     pub fn pop_from_stack(&self) -> Option<u16> {
-        let stack = self.stack.lock().unwrap();
+        let stack = self.stack.lock();
 
         let stack_ptr = self.stack_ptr.load(Ordering::Relaxed);
 

@@ -1,16 +1,17 @@
 use crate::config::InputConfig;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
-use std::time::Duration;
-use winit_input_helper::WinitInputHelper;
-
+use alloc::sync::Arc;
+use core::{
+    sync::atomic::{AtomicBool, AtomicU8, Ordering},
+    time::Duration,
+};
+use parking_lot::{Condvar, Mutex};
 #[cfg(test)]
 use winit::keyboard::Key;
-
 #[cfg(test)]
 use winit::keyboard::SmolStr;
+use winit_input_helper::WinitInputHelper;
 
-const NUMBER_OF_INPUTS: usize = 16;
+const NUMBER_OF_INPUTS: u8 = 16;
 const CONDVAR_WAIT_TIMEOUT: Duration = Duration::from_millis(100);
 
 #[derive(PartialEq, Eq)]
@@ -70,19 +71,19 @@ impl InputManager {
     }
 
     pub fn update_input(&self, input: &WinitInputHelper) {
-        let mut key_states = self.key_states.lock().unwrap();
-        let mut newest_key_state = self.newest_key_state.lock().unwrap();
+        let mut key_states = self.key_states.lock();
+        let mut newest_key_state = self.newest_key_state.lock();
 
         for i in 0..NUMBER_OF_INPUTS {
-            if input.key_pressed_logical(self.config.key_bindings[i].as_ref()) {
-                key_states[i] = true;
+            if input.key_pressed_logical(self.config.key_bindings[i as usize].as_ref()) {
+                key_states[i as usize] = true;
 
                 if *newest_key_state == NewestKeyState::Requested {
-                    self.newest_key.store(i as u8, Ordering::Release);
+                    self.newest_key.store(i, Ordering::Release);
                     *newest_key_state = NewestKeyState::Held;
                 }
-            } else if input.key_released_logical(self.config.key_bindings[i].as_ref()) {
-                key_states[i] = false;
+            } else if input.key_released_logical(self.config.key_bindings[i as usize].as_ref()) {
+                key_states[i as usize] = false;
 
                 if *newest_key_state == NewestKeyState::Held {
                     *newest_key_state = NewestKeyState::Sent;
@@ -90,6 +91,9 @@ impl InputManager {
                 }
             }
         }
+
+        drop(key_states);
+        drop(newest_key_state);
 
         self.newest_key_cvar.notify_all();
     }
@@ -100,30 +104,27 @@ impl InputManager {
             "Should not be possible to read non-existent key_states."
         );
 
-        return self.key_states.lock().unwrap()[key_index as usize];
+        self.key_states.lock()[key_index as usize]
     }
 
     pub fn get_next_key_press(&self) -> u8 {
-        let mut newest_key_state = self.newest_key_state.lock().unwrap();
+        let mut newest_key_state = self.newest_key_state.lock();
 
         while *newest_key_state != NewestKeyState::Finished && self.active.load(Ordering::Relaxed) {
-            (newest_key_state, _) = self
-                .newest_key_cvar
-                .wait_timeout(newest_key_state, CONDVAR_WAIT_TIMEOUT)
-                .unwrap();
+            self.newest_key_cvar
+                .wait_for(&mut newest_key_state, CONDVAR_WAIT_TIMEOUT);
         }
 
         *newest_key_state = NewestKeyState::Requested;
         self.newest_key_cvar.notify_all();
 
         while *newest_key_state != NewestKeyState::Sent && self.active.load(Ordering::Relaxed) {
-            (newest_key_state, _) = self
-                .newest_key_cvar
-                .wait_timeout(newest_key_state, CONDVAR_WAIT_TIMEOUT)
-                .unwrap();
+            self.newest_key_cvar
+                .wait_for(&mut newest_key_state, CONDVAR_WAIT_TIMEOUT);
         }
 
         *newest_key_state = NewestKeyState::Finished;
+        drop(newest_key_state);
         self.newest_key_cvar.notify_all();
 
         self.newest_key.load(Ordering::Acquire)
