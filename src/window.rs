@@ -5,8 +5,8 @@ use core::{
     num::NonZeroU32,
     sync::atomic::{AtomicBool, Ordering},
 };
+use log::error;
 use softbuffer::{Buffer, Context, Surface};
-use std::eprintln;
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
@@ -19,7 +19,7 @@ use winit_input_helper::WinitInputHelper;
 const WINDOW_TITLE: &str = "CHIP-8 Emulator";
 const BASE_RESOLUTION_SCALAR: u32 = 20;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct Size {
     pub width: u32,
     pub height: u32,
@@ -40,7 +40,7 @@ impl Size {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct Position {
     pub index: u32,
     pub x: u32,
@@ -149,7 +149,7 @@ impl WindowManager {
         let mut render_buffer = match surface.buffer_mut() {
             Ok(b) => b,
             Err(e) => {
-                eprintln!("Failed to retrieve the render buffer ({e}).");
+                error!("Failed to retrieve the render buffer ({e}).");
                 self.active.store(false, Ordering::Relaxed);
                 return;
             }
@@ -207,7 +207,7 @@ impl WindowManager {
         drop(gpu_buffer);
 
         if let Err(e) = render_buffer.present() {
-            eprintln!("Failed to present the render buffer ({e}).");
+            error!("Failed to present the render buffer ({e}).");
             self.active.store(false, Ordering::Relaxed);
         }
     }
@@ -240,19 +240,19 @@ impl WindowManager {
         };
 
         let Some(new_size_width_nz) = NonZeroU32::new(new_size.width) else {
-            eprintln!("Failed to convert window width into NonZeroU32.");
+            error!("Failed to convert window width into NonZeroU32.");
             self.active.store(false, Ordering::Relaxed);
             return;
         };
 
         let Some(new_size_height_nz) = NonZeroU32::new(new_size.height) else {
-            eprintln!("Failed to convert window height into NonZeroU32.");
+            error!("Failed to convert window height into NonZeroU32.");
             self.active.store(false, Ordering::Relaxed);
             return;
         };
 
         if let Err(e) = surface.resize(new_size_width_nz, new_size_height_nz) {
-            eprintln!("Failed to resize the softbuffer surface ({e}).");
+            error!("Failed to resize the softbuffer surface ({e}).");
             self.active.store(false, Ordering::Relaxed);
         }
     }

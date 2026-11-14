@@ -7,11 +7,12 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
+use log::error;
 use parking_lot::{Condvar, Mutex, MutexGuard};
-use std::eprintln;
 
 const CONDVAR_WAIT_TIMEOUT: Duration = Duration::from_millis(100);
 
+#[derive(Debug)]
 pub struct Gpu {
     active: Arc<AtomicBool>,
     config: GPUConfig,
@@ -23,7 +24,7 @@ pub struct Gpu {
 impl Gpu {
     pub fn try_new(active: Arc<AtomicBool>, config: GPUConfig) -> Option<Arc<Self>> {
         if config.render_occasion == RenderOccasion::Frequency && config.render_frequency <= 0.0 {
-            eprintln!("The graphic render frequency must be greater than 0.");
+            error!("The graphic render frequency must be greater than 0.");
             active.store(false, Ordering::Relaxed);
             return None;
         }

@@ -14,7 +14,7 @@ use winit_input_helper::WinitInputHelper;
 const NUMBER_OF_INPUTS: u8 = 16;
 const CONDVAR_WAIT_TIMEOUT: Duration = Duration::from_millis(100);
 
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 enum NewestKeyState {
     Finished,
     Requested,
@@ -22,6 +22,7 @@ enum NewestKeyState {
     Sent,
 }
 
+#[derive(Debug)]
 pub struct InputManager {
     active: Arc<AtomicBool>,
     config: InputConfig,

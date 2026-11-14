@@ -1,12 +1,14 @@
 use crate::config::RAMConfig;
 use alloc::{string::String, sync::Arc, vec, vec::Vec};
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use log::error;
 use parking_lot::Mutex;
-use std::{eprintln, fs};
+use std::fs;
 
 pub const PROGRAM_START_ADDRESS: u16 = 0x200;
 pub const HEAP_SIZE: usize = 0x1000;
 
+#[derive(Debug)]
 pub struct Ram {
     active: Arc<AtomicBool>,
     config: RAMConfig,
@@ -18,13 +20,13 @@ pub struct Ram {
 impl Ram {
     pub fn try_new(active: Arc<AtomicBool>, config: RAMConfig) -> Option<Arc<Self>> {
         if config.stack_size == 0 {
-            eprintln!("The stack size must be greater than zero.");
+            error!("The stack size must be greater than zero.");
             active.store(false, Ordering::Relaxed);
             return None;
         }
 
         if config.font_starting_address > 0xFB0 {
-            eprintln!("The starting address of the font data cannot be greater than 0xFB0.");
+            error!("The starting address of the font data cannot be greater than 0xFB0.");
             active.store(false, Ordering::Relaxed);
             return None;
         }
@@ -76,7 +78,7 @@ impl Ram {
 
     pub fn load_program(&self, program_path: &String) -> bool {
         let Ok(program) = fs::read(program_path) else {
-            eprintln!("Could not find valid program at {program_path}.");
+            error!("Could not find valid program at {program_path}.");
             self.active.store(false, Ordering::Relaxed);
             return false;
         };
@@ -84,7 +86,7 @@ impl Ram {
         let start_index = PROGRAM_START_ADDRESS as usize;
 
         if start_index + program.len() > HEAP_SIZE {
-            eprintln!("Program {program_path} is too large to fit in the heap.");
+            error!("Program {program_path} is too large to fit in the heap.");
             self.active.store(false, Ordering::Relaxed);
             return false;
         }
@@ -109,7 +111,7 @@ impl Ram {
 
         if addr >= HEAP_SIZE {
             if !self.config.allow_heap_overflow {
-                eprintln!("Attempting to write to non-existent memory.");
+                error!("Attempting to write to non-existent memory.");
                 self.active.store(false, Ordering::Relaxed);
                 return false;
             }
@@ -128,7 +130,7 @@ impl Ram {
 
         if addr >= HEAP_SIZE {
             if !self.config.allow_heap_overflow {
-                eprintln!("Heap overflowed while writing.");
+                error!("Heap overflowed while writing.");
                 self.active.store(false, Ordering::Relaxed);
                 return false;
             }
@@ -138,7 +140,7 @@ impl Ram {
 
         if addr + count > HEAP_SIZE {
             if !self.config.allow_heap_overflow {
-                eprintln!("Heap overflowed while writing.");
+                error!("Heap overflowed while writing.");
                 self.active.store(false, Ordering::Relaxed);
                 return false;
             }
@@ -166,7 +168,7 @@ impl Ram {
 
         if addr >= HEAP_SIZE {
             if !self.config.allow_heap_overflow {
-                eprintln!("Attempting to read from non-existent memory.");
+                error!("Attempting to read from non-existent memory.");
                 self.active.store(false, Ordering::Relaxed);
                 return None;
             }
@@ -184,7 +186,7 @@ impl Ram {
 
         if addr >= HEAP_SIZE {
             if !self.config.allow_heap_overflow {
-                eprintln!("Heap overflowed while writing.");
+                error!("Heap overflowed while writing.");
                 self.active.store(false, Ordering::Relaxed);
                 return None;
             }
@@ -194,7 +196,7 @@ impl Ram {
 
         if addr + count > HEAP_SIZE {
             if !self.config.allow_heap_overflow {
-                eprintln!("Heap overflowed while reading.");
+                error!("Heap overflowed while reading.");
                 self.active.store(false, Ordering::Relaxed);
                 return None;
             }
@@ -222,7 +224,7 @@ impl Ram {
 
         if stack_ptr == self.config.stack_size {
             if !self.config.allow_stack_overflow {
-                eprintln!("Stack overflowed while pushing.");
+                error!("Stack overflowed while pushing.");
                 self.active.store(false, Ordering::Relaxed);
                 return false;
             }
@@ -247,7 +249,7 @@ impl Ram {
 
         if stack_ptr == 0 {
             if !self.config.allow_stack_overflow {
-                eprintln!("Stack overflowed while popping.");
+                error!("Stack overflowed while popping.");
                 self.active.store(false, Ordering::Relaxed);
                 return None;
             }
@@ -267,7 +269,7 @@ impl Ram {
 mod tests {
     use super::*;
 
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     enum ConfigType {
         Conservative,
         Liberal,

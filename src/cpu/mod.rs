@@ -15,8 +15,8 @@ use core::{
     slice::SliceIndex,
     sync::atomic::{AtomicBool, Ordering},
 };
+use log::error;
 use parking_lot::{Mutex, MutexGuard};
-use std::eprintln;
 
 pub struct Cpu {
     pub active: Arc<AtomicBool>,
@@ -42,7 +42,7 @@ impl Cpu {
         input_manager: Arc<InputManager>,
     ) -> Option<Arc<Self>> {
         if config.instructions_per_second <= 0.0 {
-            eprintln!("The CPU's instruction-per-second rate must be greater than 0.");
+            error!("The CPU's instruction-per-second rate must be greater than 0.");
             active.store(false, Ordering::Relaxed);
             return None;
         }
@@ -141,11 +141,11 @@ impl Cpu {
                 return;
             };
 
-            let Some(function) = Self::decode_instruction(&instruction) else {
+            let Some(function) = Self::decode_instruction(instruction) else {
                 continue;
             };
 
-            if self.execute_instruction(&instruction, function) {
+            if self.execute_instruction(instruction, function) {
                 limiter.reset();
             }
         }
@@ -155,7 +155,7 @@ impl Cpu {
         let mut pc = self.pc.lock();
 
         if *pc >= 0xFFE && !self.config.allow_program_counter_overflow {
-            eprintln!("Program counter overflowed.");
+            error!("Program counter overflowed.");
             self.active.store(false, Ordering::Relaxed);
             return None;
         }
@@ -168,11 +168,11 @@ impl Cpu {
         Some(Opcode::from_u8s(instruction_bytes[0], instruction_bytes[1]))
     }
 
-    fn decode_instruction(instruction: &Opcode) -> Option<InstructionFunction> {
+    fn decode_instruction(instruction: Opcode) -> Option<InstructionFunction> {
         instructions::get_instruction_function(instruction)
     }
 
-    fn execute_instruction(&self, instruction: &Opcode, function: InstructionFunction) -> bool {
+    fn execute_instruction(&self, instruction: Opcode, function: InstructionFunction) -> bool {
         function(self, instruction)
     }
 
@@ -193,7 +193,7 @@ impl Cpu {
         let mut pc = self.pc.lock();
 
         if *pc >= 0xFFE && !self.config.allow_program_counter_overflow {
-            eprintln!("Program counter overflowed.");
+            error!("Program counter overflowed.");
             self.active.store(false, Ordering::Relaxed);
             return false;
         }
@@ -232,7 +232,7 @@ impl Cpu {
         let (val, wrapped) = index_ref.overflowing_add(value);
 
         if wrapped && !self.config.allow_index_register_overflow {
-            eprintln!("Index register overflowed.");
+            error!("Index register overflowed.");
             self.active.store(false, Ordering::Relaxed);
             return None;
         }
@@ -319,7 +319,7 @@ mod tests {
     use super::*;
     use alloc::vec;
 
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     enum ConfigType {
         Conservative,
         Liberal,

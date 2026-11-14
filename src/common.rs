@@ -1,6 +1,9 @@
 use core::time::Duration;
-use std::{eprintln, thread, time::Instant};
+use std::{thread, time::Instant};
 
+use log::error;
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Limiter {
     delay: Duration,
     catch_up: bool,
@@ -27,7 +30,7 @@ impl Limiter {
 
         self.target = if self.catch_up {
             self.target.checked_add(self.delay).unwrap_or_else(|| {
-                eprintln!("Failed to catch-up limiter.");
+                error!("Failed to catch-up limiter.");
                 Instant::now()
             })
         } else {

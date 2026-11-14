@@ -4,12 +4,13 @@ use crate::{
 };
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use log::error;
 use rodio::{
     DeviceSinkBuilder, MixerDeviceSink, Player,
     source::{SawtoothWave, SineWave, SquareWave, TriangleWave},
 };
-use std::eprintln;
 
+#[derive(Debug)]
 pub struct DelayTimer {
     active: Arc<AtomicBool>,
     config: DelayTimerConfig,
@@ -19,7 +20,7 @@ pub struct DelayTimer {
 impl DelayTimer {
     pub fn try_new(active: Arc<AtomicBool>, config: DelayTimerConfig) -> Option<Arc<Self>> {
         if config.delay_timer_decrement_rate <= 0.0 {
-            eprintln!("The delay timer's decrement rate must be greater than zero.");
+            error!("The delay timer's decrement rate must be greater than zero.");
             active.store(false, Ordering::Relaxed);
             return None;
         }
@@ -76,7 +77,7 @@ pub struct SoundTimer {
 impl SoundTimer {
     pub fn try_new(active: Arc<AtomicBool>, config: SoundTimerConfig) -> Option<Arc<Self>> {
         if config.sound_timer_decrement_rate <= 0.0 {
-            eprintln!("The sound timer's decrement rate must be greater than zero.");
+            error!("The sound timer's decrement rate must be greater than zero.");
             active.store(false, Ordering::Relaxed);
             return None;
         }
@@ -84,7 +85,7 @@ impl SoundTimer {
         let handle = match DeviceSinkBuilder::open_default_sink() {
             Ok(s) => s,
             Err(e) => {
-                eprintln!("Failed to open audio stream ({e}).");
+                error!("Failed to open audio stream ({e}).");
                 return None;
             }
         };
@@ -149,10 +150,8 @@ impl SoundTimer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{
-        thread::{self, JoinHandle},
-        time::Duration,
-    };
+    use core::time::Duration;
+    use std::thread::{self, JoinHandle};
 
     fn create_delay_objects() -> (Arc<DelayTimer>, JoinHandle<()>, Arc<AtomicBool>) {
         let active = Arc::new(AtomicBool::new(true));
