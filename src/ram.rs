@@ -1,5 +1,5 @@
 use crate::config::RAMConfig;
-use alloc::{string::String, sync::Arc, vec, vec::Vec};
+use alloc::{boxed::Box, string::String, sync::Arc, vec, vec::Vec};
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use log::error;
 use parking_lot::Mutex;
@@ -13,7 +13,7 @@ pub struct Ram {
     active: Arc<AtomicBool>,
     config: RAMConfig,
     heap: Mutex<[u8; HEAP_SIZE]>,
-    stack: Mutex<Vec<u16>>,
+    stack: Mutex<Box<[u16]>>,
     stack_ptr: AtomicUsize,
 }
 
@@ -34,7 +34,7 @@ impl Ram {
         let this = Self {
             active,
             heap: Mutex::new([0; HEAP_SIZE]),
-            stack: Mutex::new(vec![0; config.stack_size]),
+            stack: Mutex::new(vec![0; config.stack_size].into_boxed_slice()),
             stack_ptr: AtomicUsize::new(0),
             config,
         };
@@ -180,7 +180,7 @@ impl Ram {
         Some(heap[addr])
     }
 
-    pub fn read_bytes(&self, addr: u16, count: u16) -> Option<Vec<u8>> {
+    pub fn read_bytes(&self, addr: u16, count: u16) -> Option<Box<[u8]>> {
         let mut addr = addr as usize;
         let count = count as usize;
 
@@ -204,17 +204,17 @@ impl Ram {
             let count_pre_split = HEAP_SIZE - addr;
             let count_post_split = count - count_pre_split;
 
-            let mut bytes: Vec<u8> = Vec::with_capacity(count);
+            let mut bytes = Vec::with_capacity(count);
             let heap = self.heap.lock();
             bytes.extend_from_slice(&heap[addr..]);
             bytes.extend_from_slice(&heap[..count_post_split]);
             drop(heap);
 
-            return Some(bytes);
+            return Some(bytes.into_boxed_slice());
         }
 
         let heap = self.heap.lock();
-        Some(heap[addr..addr + count].to_vec())
+        Some(heap[addr..addr + count].into())
     }
 
     pub fn push_to_stack(&self, val: u16) -> bool {
@@ -297,7 +297,7 @@ mod tests {
 
         fs::remove_file(program_path).unwrap();
 
-        let ideal_bytes = vec![0x00, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x00];
+        let ideal_bytes = vec![0x00, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x00].into_boxed_slice();
         let actual_bytes = ram.read_bytes(PROGRAM_START_ADDRESS - 1, 7).unwrap();
 
         assert_eq!(ideal_bytes, actual_bytes);
@@ -334,7 +334,7 @@ mod tests {
     fn test_read_bytes_from_memory() {
         let (ram, active) = create_objects(ConfigType::Conservative);
 
-        let ideal_bytes = vec![0x48, 0x65, 0x6c, 0x6c, 0x6f];
+        let ideal_bytes = vec![0x48, 0x65, 0x6c, 0x6c, 0x6f].into_boxed_slice();
         let start_addr: u16 = 0x789;
 
         for i in 0..5 {
@@ -351,7 +351,7 @@ mod tests {
     fn test_read_memory_with_successful_overflow() {
         let (ram, active) = create_objects(ConfigType::Liberal);
 
-        let ideal_bytes = vec![0x48, 0x65, 0x6c, 0x6c, 0x6f];
+        let ideal_bytes = vec![0x48, 0x65, 0x6c, 0x6c, 0x6f].into_boxed_slice();
 
         assert!(ram.write_bytes(&ideal_bytes[..3], 0xFFD));
         assert!(ram.write_bytes(&ideal_bytes[3..], 0x000));
@@ -379,7 +379,7 @@ mod tests {
     fn test_read_unaddressable_memory_with_successful_overflow() {
         let (ram, active) = create_objects(ConfigType::Liberal);
 
-        let ideal_bytes = vec![0x48, 0x65, 0x6c, 0x6c, 0x6f];
+        let ideal_bytes = vec![0x48, 0x65, 0x6c, 0x6c, 0x6f].into_boxed_slice();
 
         assert!(ram.write_bytes(&ideal_bytes[..3], 0xFFD));
         assert!(ram.write_bytes(&ideal_bytes[3..], 0x000));

@@ -1,5 +1,4 @@
 use crate::cpu::Cpu;
-use alloc::vec;
 use log::error;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -419,7 +418,7 @@ fn i_fx29_ld_f_vx(this: &Cpu, op: Opcode) -> bool {
 
 fn i_fx33_ld_b_vx(this: &Cpu, op: Opcode) -> bool {
     let vx = this.get_v_reg(op.get_x());
-    let bcd = vec![vx / 100, (vx / 10) % 10, vx % 10];
+    let bcd = [vx / 100, (vx / 10) % 10, vx % 10];
     this.ram.write_bytes(&bcd, this.get_index_reg());
     false
 }
@@ -429,7 +428,7 @@ fn i_fx55_ld_i_vx(this: &Cpu, op: Opcode) -> bool {
     let index = this.get_index_reg_ref();
 
     this.ram
-        .write_bytes(&this.get_v_reg_range(0..=x as usize), *index);
+        .write_bytes(&this.get_v_reg_up_to(x as usize), *index);
 
     if this.config.move_index_with_reads {
         this.increment_index_reg_ref_by(index, u16::from(x) + 1);

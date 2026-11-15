@@ -1,5 +1,5 @@
 use crate::{gpu::Gpu, input::InputManager};
-use alloc::{rc::Rc, sync::Arc, vec};
+use alloc::{rc::Rc, sync::Arc};
 use core::{
     cmp,
     num::NonZeroU32,
@@ -218,12 +218,12 @@ impl WindowManager {
         color: u32,
         buffer: &mut Buffer<'_, Rc<Window>, Rc<Window>>,
     ) {
-        let pixel_row = vec![color; size.width as usize];
-
         for row in 0..size.height {
             let start_index = pos.index + row * pos.get_screen_width();
-            buffer[start_index as usize..(start_index + size.width) as usize]
-                .copy_from_slice(&pixel_row);
+            let end_index = start_index + size.width;
+            for pixel in start_index..end_index {
+                buffer[pixel as usize] = color;
+            }
         }
     }
 

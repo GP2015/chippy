@@ -2,7 +2,7 @@ use crate::{
     common::Limiter,
     config::{GPUConfig, RenderOccasion},
 };
-use alloc::{sync::Arc, vec, vec::Vec};
+use alloc::{boxed::Box, sync::Arc, vec};
 use core::{
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
@@ -16,7 +16,7 @@ const CONDVAR_WAIT_TIMEOUT: Duration = Duration::from_millis(100);
 pub struct Gpu {
     active: Arc<AtomicBool>,
     config: GPUConfig,
-    framebuffer: Mutex<Vec<bool>>,
+    framebuffer: Mutex<Box<[bool]>>,
     render_queued: Mutex<bool>,
     render_queue_cvar: Condvar,
 }
@@ -34,7 +34,7 @@ impl Gpu {
         Some(Arc::new(Self {
             active,
             config,
-            framebuffer: Mutex::new(vec![false; framebuffer_size as usize]),
+            framebuffer: Mutex::new(vec![false; framebuffer_size as usize].into_boxed_slice()),
             render_queued: Mutex::new(false),
             render_queue_cvar: Condvar::new(),
         }))
@@ -92,7 +92,7 @@ impl Gpu {
         self.config.screen_border_color
     }
 
-    pub fn get_framebuffer(&self) -> MutexGuard<'_, Vec<bool>> {
+    pub fn get_framebuffer(&self) -> MutexGuard<'_, Box<[bool]>> {
         self.framebuffer.lock()
     }
 
@@ -163,7 +163,7 @@ impl Gpu {
 
     fn draw_byte(
         &self,
-        framebuffer: &mut MutexGuard<'_, Vec<bool>>,
+        framebuffer: &mut MutexGuard<'_, Box<[bool]>>,
         mut byte: u8,
         x_pos: u32,
         y_pos: u32,
@@ -188,7 +188,7 @@ impl Gpu {
 
     fn draw_pixel(
         &self,
-        framebuffer: &mut MutexGuard<'_, Vec<bool>>,
+        framebuffer: &mut MutexGuard<'_, Box<[bool]>>,
         mut x_pos: u32,
         mut y_pos: u32,
     ) -> Option<bool> {

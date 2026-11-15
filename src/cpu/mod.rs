@@ -9,12 +9,8 @@ use crate::{
     ram::{PROGRAM_START_ADDRESS, Ram},
     timer::{DelayTimer, SoundTimer},
 };
-use alloc::{sync::Arc, vec::Vec};
-use core::{
-    ops::{Bound, RangeBounds},
-    slice::SliceIndex,
-    sync::atomic::{AtomicBool, Ordering},
-};
+use alloc::{boxed::Box, sync::Arc};
+use core::sync::atomic::{AtomicBool, Ordering};
 use log::error;
 use parking_lot::{Mutex, MutexGuard};
 
@@ -265,32 +261,15 @@ impl Cpu {
         (v[x as usize], v[y as usize])
     }
 
-    pub fn get_v_reg_range<R>(&self, range: R) -> Vec<u8>
-    where
-        R: SliceIndex<[u8], Output = [u8]> + RangeBounds<usize>,
-    {
+    pub fn get_v_reg_up_to(&self, inc: usize) -> Box<[u8]> {
+        debug_assert!(
+            inc <= 0xF,
+            "Should not be possible to access non-existent V registers."
+        );
+
         let v = self.v.lock();
 
-        if cfg!(debug_assertions) {
-            let start = match range.start_bound() {
-                Bound::Included(&s) => s,
-                Bound::Excluded(&s) => s + 1,
-                Bound::Unbounded => 0,
-            };
-
-            let end = match range.end_bound() {
-                Bound::Included(&e) => e,
-                Bound::Excluded(&e) => e.saturating_sub(1),
-                Bound::Unbounded => v.len() - 1,
-            };
-
-            debug_assert!(
-                start <= 0xF && end <= 0xF,
-                "Should not be possible to access non-existent V registers."
-            );
-        }
-
-        v[range].to_vec()
+        v[0..=inc].to_vec().into_boxed_slice()
     }
 
     pub fn set_v_reg(&self, reg: u8, val: u8) {
@@ -474,13 +453,13 @@ mod tests {
     fn test_get_v_register_range() {
         let (cpu, active) = create_objects(ConfigType::Conservative);
 
-        let ideal_bytes = vec![0x48, 0x65, 0x6c, 0x6c, 0x6f];
+        let ideal_bytes = vec![0x48, 0x65, 0x6c, 0x6c, 0x6f].into_boxed_slice();
 
         for i in 0..5 {
-            cpu.set_v_reg(i + 2, ideal_bytes[i as usize]);
+            cpu.set_v_reg(i, ideal_bytes[i as usize]);
         }
 
-        assert_eq!(ideal_bytes, cpu.get_v_reg_range(2..7));
+        assert_eq!(ideal_bytes, cpu.get_v_reg_up_to(4));
         assert!(active.load(Ordering::Relaxed));
     }
 }
