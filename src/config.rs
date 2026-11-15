@@ -7,22 +7,13 @@ use winit::keyboard::{Key, SmolStr};
 
 const CONFIG_FILE_PATH: &str = "config.toml";
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum Preset {
-    CHIP8,
-    Custom,
-}
-
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Config {
-    pub preset: Preset,
     pub cpu: CPUConfig,
     pub gpu: GPUConfig,
     pub input: InputConfig,
     pub ram: RAMConfig,
-    pub delay_timer: DelayTimerConfig,
     pub sound_timer: SoundTimerConfig,
 }
 
@@ -42,14 +33,7 @@ pub struct CPUConfig {
     pub allow_index_register_overflow: bool,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum RenderOccasion {
-    Changes,
-    Frequency,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct GPUConfig {
     pub pixel_color_when_active: u32,
     pub pixel_color_when_inactive: u32,
@@ -58,8 +42,6 @@ pub struct GPUConfig {
     pub vertical_resolution: u32,
     pub wrap_sprite_positions: bool,
     pub wrap_sprite_pixels: bool,
-    pub render_occasion: RenderOccasion,
-    pub render_frequency: f64,
 }
 
 fn deserialize_keys<'de, D>(deserializer: D) -> Result<[Key<SmolStr>; 16], D::Error>
@@ -83,17 +65,11 @@ pub struct InputConfig {
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq)]
 pub struct RAMConfig {
-    pub stack_size: usize,
     pub allow_stack_overflow: bool,
     pub allow_heap_overflow: bool,
     pub font_starting_address: u16,
     #[serde_as(as = "[_; 80]")]
     pub font_data: [u8; 80],
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
-pub struct DelayTimerConfig {
-    pub delay_timer_decrement_rate: f64,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
@@ -107,7 +83,6 @@ pub enum ToneWaveform {
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct SoundTimerConfig {
-    pub sound_timer_decrement_rate: f64,
     pub tone_frequency: f32,
     pub tone_waveform: ToneWaveform,
 }
@@ -118,36 +93,11 @@ pub fn generate_configs() -> Option<Config> {
         return None;
     };
 
-    let mut config: Config = toml::from_str(&raw_config)
+    toml::from_str(&raw_config)
         .map_err(|err| {
             error!("Could not parse config.toml ({err}).");
         })
-        .ok()?;
-
-    match config.preset {
-        Preset::CHIP8 => enable_chip8_preset(&mut config),
-        Preset::Custom => (),
-    }
-
-    Some(config)
-}
-
-const fn enable_chip8_preset(config: &mut Config) {
-    config.cpu.reset_flag_for_bitwise_operations = true;
-    config.cpu.use_new_shift_instruction = false;
-    config.cpu.use_new_jump_instruction = false;
-    config.cpu.set_flag_for_index_overflow = false;
-    config.cpu.move_index_with_reads = true;
-    config.cpu.limit_to_one_draw_per_frame = true;
-    config.gpu.horizontal_resolution = 64;
-    config.gpu.vertical_resolution = 32;
-    config.gpu.wrap_sprite_positions = true;
-    config.gpu.wrap_sprite_pixels = false;
-    config.gpu.render_occasion = RenderOccasion::Frequency;
-    config.gpu.render_frequency = 60.0;
-    config.ram.stack_size = 16;
-    config.delay_timer.delay_timer_decrement_rate = 60.0;
-    config.sound_timer.sound_timer_decrement_rate = 60.0;
+        .ok()
 }
 
 #[cfg(test)]

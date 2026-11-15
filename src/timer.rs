@@ -1,6 +1,6 @@
 use crate::{
     common::Limiter,
-    config::{DelayTimerConfig, SoundTimerConfig, ToneWaveform},
+    config::{SoundTimerConfig, ToneWaveform},
 };
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
@@ -13,38 +13,19 @@ use rodio::{
 #[derive(Debug)]
 pub struct DelayTimer {
     active: Arc<AtomicBool>,
-    config: DelayTimerConfig,
     value: AtomicU8,
 }
 
 impl DelayTimer {
-    pub fn try_new(active: Arc<AtomicBool>, config: DelayTimerConfig) -> Option<Arc<Self>> {
-        if config.delay_timer_decrement_rate <= 0.0 {
-            error!("The delay timer's decrement rate must be greater than zero.");
-            active.store(false, Ordering::Relaxed);
-            return None;
-        }
-
-        Some(Arc::new(Self {
+    pub fn new(active: Arc<AtomicBool>) -> Arc<Self> {
+        Arc::new(Self {
             active,
-            config,
             value: AtomicU8::new(0),
-        }))
-    }
-
-    #[cfg(test)]
-    pub fn new_default(active: Arc<AtomicBool>) -> Arc<Self> {
-        Self::try_new(
-            active,
-            DelayTimerConfig {
-                delay_timer_decrement_rate: 60.0,
-            },
-        )
-        .unwrap()
+        })
     }
 
     pub fn run(&self) {
-        let mut limiter = Limiter::new(self.config.delay_timer_decrement_rate, true);
+        let mut limiter = Limiter::new(60.0, true);
 
         while self.active.load(Ordering::Relaxed) {
             limiter.wait_if_early();
@@ -68,27 +49,22 @@ impl DelayTimer {
 
 pub struct SoundTimer {
     active: Arc<AtomicBool>,
-    config: SoundTimerConfig,
     value: AtomicU8,
     _handle: MixerDeviceSink,
     player: Player,
 }
 
 impl SoundTimer {
-    pub fn try_new(active: Arc<AtomicBool>, config: SoundTimerConfig) -> Option<Arc<Self>> {
-        if config.sound_timer_decrement_rate <= 0.0 {
-            error!("The sound timer's decrement rate must be greater than zero.");
-            active.store(false, Ordering::Relaxed);
-            return None;
-        }
-
-        let handle = match DeviceSinkBuilder::open_default_sink() {
+    pub fn try_new(active: Arc<AtomicBool>, config: &SoundTimerConfig) -> Option<Arc<Self>> {
+        let mut handle = match DeviceSinkBuilder::open_default_sink() {
             Ok(s) => s,
             Err(e) => {
                 error!("Failed to open audio stream ({e}).");
                 return None;
             }
         };
+
+        handle.log_on_drop(false);
 
         let player = Player::connect_new(handle.mixer());
         player.pause();
@@ -105,7 +81,6 @@ impl SoundTimer {
             value: AtomicU8::new(0),
             _handle: handle,
             player,
-            config,
         }))
     }
 
@@ -113,8 +88,7 @@ impl SoundTimer {
     pub fn new_default(active: Arc<AtomicBool>) -> Arc<Self> {
         Self::try_new(
             active,
-            SoundTimerConfig {
-                sound_timer_decrement_rate: 60.0,
+            &SoundTimerConfig {
                 tone_frequency: 440.0,
                 tone_waveform: ToneWaveform::Sine,
             },
@@ -123,7 +97,7 @@ impl SoundTimer {
     }
 
     pub fn run(&self) {
-        let mut limiter = Limiter::new(self.config.sound_timer_decrement_rate, true);
+        let mut limiter = Limiter::new(60.0, true);
 
         while self.active.load(Ordering::Relaxed) {
             limiter.wait_if_early();
@@ -155,7 +129,7 @@ mod tests {
 
     fn create_delay_objects() -> (Arc<DelayTimer>, JoinHandle<()>, Arc<AtomicBool>) {
         let active = Arc::new(AtomicBool::new(true));
-        let timer = DelayTimer::new_default(active.clone());
+        let timer = DelayTimer::new(active.clone());
         let timer_clone = timer.clone();
         let handle = thread::spawn(move || timer_clone.run());
         (timer, handle, active)

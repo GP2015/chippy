@@ -5,6 +5,7 @@ use log::error;
 use parking_lot::Mutex;
 use std::fs;
 
+pub const STACK_SIZE: usize = 16;
 pub const PROGRAM_START_ADDRESS: u16 = 0x200;
 pub const HEAP_SIZE: usize = 0x1000;
 
@@ -19,12 +20,6 @@ pub struct Ram {
 
 impl Ram {
     pub fn try_new(active: Arc<AtomicBool>, config: RAMConfig) -> Option<Arc<Self>> {
-        if config.stack_size == 0 {
-            error!("The stack size must be greater than zero.");
-            active.store(false, Ordering::Relaxed);
-            return None;
-        }
-
         if config.font_starting_address > 0xFB0 {
             error!("The starting address of the font data cannot be greater than 0xFB0.");
             active.store(false, Ordering::Relaxed);
@@ -34,7 +29,7 @@ impl Ram {
         let this = Self {
             active,
             heap: Mutex::new([0; HEAP_SIZE]),
-            stack: Mutex::new(vec![0; config.stack_size].into_boxed_slice()),
+            stack: Mutex::new(vec![0; STACK_SIZE].into_boxed_slice()),
             stack_ptr: AtomicUsize::new(0),
             config,
         };
@@ -51,7 +46,6 @@ impl Ram {
         Self::try_new(
             active,
             RAMConfig {
-                stack_size: 16,
                 allow_stack_overflow: false,
                 allow_heap_overflow: false,
                 font_starting_address: 0,
@@ -66,7 +60,6 @@ impl Ram {
         Self::try_new(
             active,
             RAMConfig {
-                stack_size: 16,
                 allow_stack_overflow: true,
                 allow_heap_overflow: true,
                 font_starting_address: 0,
@@ -222,7 +215,7 @@ impl Ram {
 
         let stack_ptr = self.stack_ptr.load(Ordering::Relaxed);
 
-        if stack_ptr == self.config.stack_size {
+        if stack_ptr == STACK_SIZE {
             if !self.config.allow_stack_overflow {
                 error!("Stack overflowed while pushing.");
                 self.active.store(false, Ordering::Relaxed);
@@ -254,9 +247,8 @@ impl Ram {
                 return None;
             }
 
-            self.stack_ptr
-                .store(self.config.stack_size - 1, Ordering::Relaxed);
-            return Some(stack[self.config.stack_size - 1]);
+            self.stack_ptr.store(STACK_SIZE - 1, Ordering::Relaxed);
+            return Some(stack[STACK_SIZE - 1]);
         }
 
         self.stack_ptr.store(stack_ptr - 1, Ordering::Relaxed);

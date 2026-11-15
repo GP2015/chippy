@@ -1,13 +1,9 @@
-use crate::{
-    common::Limiter,
-    config::{GPUConfig, RenderOccasion},
-};
+use crate::config::GPUConfig;
 use alloc::{boxed::Box, sync::Arc, vec};
 use core::{
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
-use log::error;
 use parking_lot::{Condvar, Mutex, MutexGuard};
 
 const CONDVAR_WAIT_TIMEOUT: Duration = Duration::from_millis(100);
@@ -22,27 +18,21 @@ pub struct Gpu {
 }
 
 impl Gpu {
-    pub fn try_new(active: Arc<AtomicBool>, config: GPUConfig) -> Option<Arc<Self>> {
-        if config.render_occasion == RenderOccasion::Frequency && config.render_frequency <= 0.0 {
-            error!("The graphic render frequency must be greater than 0.");
-            active.store(false, Ordering::Relaxed);
-            return None;
-        }
-
+    pub fn new(active: Arc<AtomicBool>, config: GPUConfig) -> Arc<Self> {
         let framebuffer_size = config.horizontal_resolution * config.vertical_resolution;
 
-        Some(Arc::new(Self {
+        Arc::new(Self {
             active,
             config,
             framebuffer: Mutex::new(vec![false; framebuffer_size as usize].into_boxed_slice()),
             render_queued: Mutex::new(false),
             render_queue_cvar: Condvar::new(),
-        }))
+        })
     }
 
     #[cfg(test)]
     pub fn new_default_wrapping(active: Arc<AtomicBool>) -> Arc<Self> {
-        Self::try_new(
+        Self::new(
             active,
             GPUConfig {
                 pixel_color_when_active: 0xFF_FF_FF,
@@ -52,25 +42,8 @@ impl Gpu {
                 vertical_resolution: 32,
                 wrap_sprite_positions: true,
                 wrap_sprite_pixels: true,
-                render_occasion: RenderOccasion::Changes,
-                render_frequency: 0.0,
             },
         )
-        .unwrap()
-    }
-
-    pub fn should_render_separately(&self) -> bool {
-        self.config.render_occasion == RenderOccasion::Frequency
-    }
-
-    pub fn run_separate_render(&self) {
-        let mut limiter = Limiter::new(self.config.render_frequency, true);
-
-        while self.active.load(Ordering::Relaxed) {
-            limiter.wait_if_early();
-
-            self.queue_render();
-        }
     }
 
     pub const fn get_screen_resolution(&self) -> (u32, u32) {
@@ -120,10 +93,7 @@ impl Gpu {
 
     pub fn clear_framebuffer(&self) {
         self.framebuffer.lock().fill(false);
-
-        if self.config.render_occasion == RenderOccasion::Changes {
-            self.queue_render();
-        }
+        self.queue_render();
     }
 
     pub fn draw_sprite(&self, sprite: &[u8], x_pos: u8, y_pos: u8) -> bool {
@@ -154,9 +124,7 @@ impl Gpu {
             }
         }
 
-        if self.config.render_occasion == RenderOccasion::Changes {
-            self.queue_render();
-        }
+        self.queue_render();
 
         collided
     }

@@ -307,7 +307,7 @@ mod tests {
     fn create_objects(cfg_type: ConfigType) -> (Arc<Cpu>, Arc<AtomicBool>) {
         let active = Arc::new(AtomicBool::new(true));
 
-        let delay_timer = DelayTimer::new_default(active.clone());
+        let delay_timer = DelayTimer::new(active.clone());
         let sound_timer = SoundTimer::new_default(active.clone());
         let ram = Ram::new_default_conservative(active.clone());
         let gpu = Gpu::new_default_wrapping(active.clone());

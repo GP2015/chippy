@@ -20,7 +20,7 @@ use crate::{
     timer::{DelayTimer, SoundTimer},
     window::WindowManager,
 };
-use alloc::{string::String, sync::Arc, vec::Vec};
+use alloc::{string::String, sync::Arc};
 use clap::Parser;
 use core::sync::atomic::{AtomicBool, Ordering};
 use log::{error, info};
@@ -74,16 +74,11 @@ fn main() {
 
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    let mut handles = Vec::new();
-
-    handles.push(thread::spawn(move || comps.delay_timer.run()));
-    handles.push(thread::spawn(move || comps.sound_timer.run()));
-
-    if comps.gpu.should_render_separately() {
-        handles.push(thread::spawn(move || comps.gpu.run_separate_render()));
-    }
-
-    handles.push(thread::spawn(move || comps.cpu.run()));
+    let handles = [
+        thread::spawn(move || comps.delay_timer.run()),
+        thread::spawn(move || comps.sound_timer.run()),
+        thread::spawn(move || comps.cpu.run()),
+    ];
 
     if let Err(e) = event_loop.run_app(&mut window_manager) {
         error!("Window manager event loop failed ({e}).");
@@ -107,11 +102,11 @@ fn main() {
 fn create_components() -> Option<Components> {
     let config = config::generate_configs()?;
     let active = Arc::new(AtomicBool::new(true));
-    let delay_timer = DelayTimer::try_new(active.clone(), config.delay_timer)?;
-    let sound_timer = SoundTimer::try_new(active.clone(), config.sound_timer)?;
+    let delay_timer = DelayTimer::new(active.clone());
+    let sound_timer = SoundTimer::try_new(active.clone(), &config.sound_timer)?;
     let input_manager = InputManager::try_new(active.clone(), config.input);
     let ram = Ram::try_new(active.clone(), config.ram)?;
-    let gpu = Gpu::try_new(active.clone(), config.gpu)?;
+    let gpu = Gpu::new(active.clone(), config.gpu);
     let cpu = Cpu::try_new(
         active.clone(),
         config.cpu,
